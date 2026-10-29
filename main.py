@@ -1,8 +1,9 @@
+import os
 import random
 import pygame
 from pygame.locals import *
 
-#settings
+# ---------------------------------------------------------------- settings
 TILE = 30
 COLS, ROWS = 32, 18
 WIDTH, HEIGHT = COLS * TILE, ROWS * TILE  # 960 x 540, same as the original window
@@ -26,11 +27,35 @@ BLOCKS = {
     4: ((235, 190, 50), 0.8, 10),    # gold
 }
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+TEXTURE_FILES = {1: "dirt.png", 2: "stone.png", 3: "slate.png", 4: "gold.png"}
+PLAYER_TEXTURE_FILE = "worker.png"
+
 BG = (40, 36, 44)
 EMPTY = (62, 56, 66)
 
 
-#world
+# ---------------------------------------------------------------- textures
+def load_textures():
+    """Load textures/<name>.png next to this script; missing files fall back to colours."""
+    textures = {}
+    for kind, name in TEXTURE_FILES.items():
+        path = os.path.join(BASE_DIR, "assets", name)
+        try:
+            img = pygame.image.load(path).convert_alpha()
+            textures[kind] = pygame.transform.scale(img, (TILE, TILE))
+        except (FileNotFoundError, pygame.error):
+            textures[kind] = None
+    # player sprite, scaled to the player's size
+    try:
+        img = pygame.image.load(os.path.join(BASE_DIR, "assets", PLAYER_TEXTURE_FILE)).convert_alpha()
+        textures["player"] = pygame.transform.scale(img, (PLAYER_SIZE, PLAYER_SIZE))
+    except (FileNotFoundError, pygame.error):
+        textures["player"] = None
+    return textures
+
+
+# ---------------------------------------------------------------- world
 class World:
     """Grid of breakable blocks that keeps generating to the right forever."""
 
@@ -42,18 +67,18 @@ class World:
         for row in range(ROWS):
             if col < SAFE_COLS:
                 if random.random() < 0.08:
-                    self.blocks[(col, row)] = 1
+                    self.blocks[(col, row)] = 2
                 continue
             r = random.random()
             if r < 0.15:
-                continue                       # empty pocket
+                kind = 2
             t = random.random()
             if t < 0.45:
-                kind = 1
+                kind = 2
             elif t < 0.80:
                 kind = 2
             elif t < 0.95:
-                kind = 3
+                kind = 2
             else:
                 kind = 4
             self.blocks[(col, row)] = kind
@@ -73,9 +98,10 @@ class World:
         return (col, row) in self.blocks
 
 
-#game
+# ---------------------------------------------------------------- game
 class Game:
-    def __init__(self):
+    def __init__(self, textures=None):
+        self.textures = textures or {}
         self.reset()
 
     def reset(self):
@@ -92,7 +118,7 @@ class Game:
         self.cam_x = 0.0
         self.alive = True
 
-    #movement
+    # -- movement -----------------------------------------------------
     def collides(self, rect):
         c0, c1 = rect.left // TILE, (rect.right - 1) // TILE
         r0, r1 = rect.top // TILE, (rect.bottom - 1) // TILE
@@ -193,10 +219,14 @@ class Game:
                     continue
                 color = BLOCKS[kind][0]
                 r = pygame.Rect(col * TILE - self.cam_x, row * TILE, TILE, TILE)
-                pygame.draw.rect(screen, color, r)
-                pygame.draw.rect(screen, tuple(max(0, c - 35) for c in color), r, 1)
-                if kind == 4:
-                    pygame.draw.circle(screen, (255, 235, 130), r.center, 5)
+                tex = self.textures.get(kind)
+                if tex:
+                    screen.blit(tex, r)
+                else:
+                    pygame.draw.rect(screen, color, r)
+                    pygame.draw.rect(screen, tuple(max(0, c - 35) for c in color), r, 1)
+                    if kind == 4:
+                        pygame.draw.circle(screen, (255, 235, 130), r.center, 5)
 
         # crack overlay on the block being mined
         if self.mine_target in self.world.blocks:
@@ -210,10 +240,16 @@ class Game:
 
         # facing indicator + player
         p = self.player.move(-self.cam_x, 0)
-        pygame.draw.rect(screen, (90, 170, 255), p, border_radius=4)
-        pygame.draw.rect(screen, (30, 60, 110), p, 2, border_radius=4)
         fx, fy = self.facing
-        pygame.draw.circle(screen, (255, 255, 255), (p.centerx + fx * 6, p.centery + fy * 6), 3)
+        sprite = self.textures.get("player")
+        if sprite:
+            if fx < 0:
+                sprite = pygame.transform.flip(sprite, True, False)  # face left
+            screen.blit(sprite, p)
+        else:
+            pygame.draw.rect(screen, (90, 170, 255), p, border_radius=4)
+            pygame.draw.rect(screen, (30, 60, 110), p, 2, border_radius=4)
+            pygame.draw.circle(screen, (255, 255, 255), (p.centerx + fx * 6, p.centery + fy * 6), 3)
 
         # closing wall on the left
         wx = int(self.wall_x - self.cam_x)
@@ -272,7 +308,7 @@ def main():
     quit_btn.center = (WIDTH // 2, 340)
 
     state = "menu"
-    game = Game()
+    game = Game(load_textures())
 
     while True:
         dt = min(clock.tick(60) / 1000.0, 0.05)
