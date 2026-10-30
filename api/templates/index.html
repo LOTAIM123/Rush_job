@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="lv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rush Job — Labākie rezultāti</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+</head>
+<body>
+  <main>
+    <h1>Rush Job</h1>
+    <p class="sub">Labākie rezultāti</p>
+    {% if scores %}
+    <table>
+      <thead><tr><th>#</th><th>Vārds</th><th>Punkti</th><th>Laiks</th></tr></thead>
+      <tbody>
+      {% for s in scores %}
+        <tr><td>{{ loop.index }}</td><td>{{ s.name }}</td><td>{{ s.score }}</td><td>{{ "%.1f"|format(s.seconds) }} s</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty">Vēl nav neviena rezultāta. Esi pirmais!</p>
+    {% endif %}
+  </main>
+</body>
+</html>
