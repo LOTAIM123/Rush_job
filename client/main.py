@@ -30,6 +30,7 @@ BLOCKS = {
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEXTURE_FILES = {1: "dirt.png", 2: "stone.png", 3: "slate.png", 4: "gold.png"}
 PLAYER_TEXTURE_FILE = "worker.png"
+LOGO_TEXTURE = "Moonlight_Creations_Pixelized.png"
 
 BG = (40, 36, 44)
 EMPTY = (62, 56, 66)
@@ -52,6 +53,12 @@ def load_textures():
         textures["player"] = pygame.transform.scale(img, (PLAYER_SIZE, PLAYER_SIZE))
     except (FileNotFoundError, pygame.error):
         textures["player"] = None
+    # logo texture
+    try:
+        img = pygame.image.load(os.path.join(BASE_DIR, "assets", LOGO_TEXTURE)).convert_alpha()
+        textures["logo"] = pygame.transform.scale(img, (TILE * 8, TILE * 4))
+    except (FileNotFoundError, pygame.error):
+        textures["logo"] = None
     return textures
 
 
@@ -288,9 +295,11 @@ def draw_menu(screen, title_font, font, small, start_btn, quit_btn):
         pygame.draw.rect(screen, (255, 255, 255), rect, 2, border_radius=8)
         txt = font.render(label, True, (255, 255, 255))
         screen.blit(txt, txt.get_rect(center=rect.center))
+    pygame.image.load(os.path.join(BASE_DIR, "assets", LOGO_TEXTURE)).convert_alpha()
     draw_centered(screen, small.render("Move: arrows / WASD    Mine: hold Space (facing) or left-click nearby blocks", True, (170, 170, 180)), HEIGHT - 60)
+    
 
-
+    
 # ---------------------------------------------------------------- main
 def main():
     pygame.init()
