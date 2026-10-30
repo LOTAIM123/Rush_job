@@ -10,8 +10,8 @@ Izrakti bloki retumis (`POWERUP_CHANCE`, pēc noklusējuma 2%) dod power-up. Tie
 Katrs jauns power-up pievieno jaunu kaudzīti ar savu 10 s taimeri (maks. 4 no viena veida); abi veidi var darboties reizē.
 Power-up var izkrist tikai no tieši izrakta bloka, nevis no sprādzienā izpostītajiem. Iestatījumi: `game/constants.py`.
 
-## Grūtība pēc distances
+## Distance
 
-- **Bloki** kļūst cietāki: racšanas laiks * (1 + 0,003 * rūtis no starta), līdz 6x (`HARDNESS_PER_TILE`, `HARDNESS_MAX_MULT`).
+- **Bloki** mainās līdz ar distanci: sākumā zeme, ap 150 rūtīm akmens, no 300 rūtīm slate (ciets akmens), ar vienmērīgu pāreju (`BLOCK_TIER_DIST`). Zelts izkrīt jebkurā distancē (`GOLD_CHANCE`).
 - **Siena** kļūst ātrāka līdz ar nogājušo distanci: 18 px/s + 0,2 px/s par rūti, līdz 140 px/s (`WALL_SPEED_PER_TILE`, `WALL_SPEED_MAX`). Laiks vairs neietekmē sienas ātrumu.
 - Veikalā var nopirkt **Veiksmi** (+1% power-up varbūtības par līmeni, maks. 25 līmeņi).

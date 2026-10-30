@@ -1,6 +1,7 @@
 import random
 
-from .constants import ROWS, SAFE_COLS, SHOP_EVERY, SHOP_HALF, START_COL
+from .constants import (BLOCK_TIER_DIST, GOLD_CHANCE, ROWS, SAFE_COLS,
+                        SHOP_EVERY, SHOP_HALF, START_COL)
 
 
 def shop_col_near(col):
@@ -25,20 +26,26 @@ class World:
         for row in range(ROWS):
             if col < SAFE_COLS:
                 if self.rng.random() < 0.08:
-                    self.blocks[(col, row)] = 2
+                    self.blocks[(col, row)] = 1
                 continue
-            if self.rng.random() < 0.15:
-                kind = 2
-            t = self.rng.random()
-            if t < 0.45:
-                kind = 2
-            elif t < 0.80:
-                kind = 2
-            elif t < 0.95:
-                kind = 2
-            else:
+            if self.rng.random() < GOLD_CHANCE:
                 kind = 4
+            else:
+                kind = self.pick_tier(col)
             self.blocks[(col, row)] = kind
+
+    def pick_tier(self, col):
+        """Zeme (1) sākumā, tad akmens (2), tālāk slate (3): vienmērīga pāreja."""
+        x = max(0, col - START_COL) / BLOCK_TIER_DIST
+        w_dirt = max(0.0, 1 - x)
+        w_stone = max(0.0, 1 - abs(x - 1))
+        w_slate = min(1.0, max(0.0, x - 1))
+        t = self.rng.random() * (w_dirt + w_stone + w_slate)
+        if t < w_dirt:
+            return 1
+        if t < w_dirt + w_stone:
+            return 2
+        return 3
 
     def ensure(self, max_col):
         while self.generated_to < max_col:

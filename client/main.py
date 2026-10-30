@@ -52,13 +52,16 @@ def camera_x(game):
     return max(0.0, game.player.centerx - WIDTH * 0.4)
 
 
-def draw_shop_room(screen, col, cam_x, small):
-    centre = shop_col_near(col)
-    if centre is None:
-        return
-    x = col * TILE - cam_x
-    pygame.draw.rect(screen, (78, 70, 92), (x, 0, TILE, HEIGHT))
-    if col == centre:
+def draw_shop_floor(screen, col, cam_x):
+    if shop_col_near(col) is not None:
+        pygame.draw.rect(screen, (78, 70, 92), (col * TILE - cam_x, 0, TILE, HEIGHT))
+
+
+def draw_shop_stall(screen, col, cam_x, small):
+    # letes platums pārsniedz vienu rūti, tāpēc zīmējama PĒC visām grīdām
+    # (citādi nākamās kolonnas grīda pārklāj pusi letes)
+    if shop_col_near(col) == col:
+        x = col * TILE - cam_x
         stall = pygame.Rect(x - TILE // 2, (ROWS // 2 - 1) * TILE, TILE * 2, TILE * 2)
         pygame.draw.rect(screen, (190, 120, 40), stall, border_radius=4)
         pygame.draw.rect(screen, (255, 220, 140), stall, 2, border_radius=4)
@@ -87,7 +90,9 @@ def draw_game(screen, game, textures, cam_x, font, small):
     screen.fill(EMPTY)
     first = int(cam_x // TILE)
     for col in range(first, first + COLS + 2):
-        draw_shop_room(screen, col, cam_x, small)
+        draw_shop_floor(screen, col, cam_x)
+    for col in range(first, first + COLS + 2):
+        draw_shop_stall(screen, col, cam_x, small)
         for row in range(ROWS):
             kind = game.world.blocks.get((col, row))
             if kind is None:
@@ -140,8 +145,7 @@ def draw_game(screen, game, textures, cam_x, font, small):
     screen.blit(small.render(f"Laiks: {game.time:0.1f}s", True, (170, 170, 180)), (WIDTH - 230, 116))
 
     screen.blit(small.render(f"Siena: {game.wall_speed():.0f} px/s", True, (230, 120, 120)), (WIDTH - 230, 138))
-    screen.blit(small.render(f"Cietība: x{game.hardness_mult(game.player.centerx // TILE):.2f}", True, (170, 170, 180)), (WIDTH - 230, 160))
-    y = 188
+    y = 166
     for key, (pname, pcolor) in POWERUPS.items():
         timers = game.powerups[key]
         if timers:

@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 from .constants import (BLAST_BASE_RADIUS, BLOCKS, BOOT_BONUS, COLS,
-                        HARDNESS_MAX_MULT, HARDNESS_PER_TILE,
                         POWERUP_CHANCE_MAX, POWERUP_LUCK_BONUS,
                         EFFECT_TTL, MESSAGE_TTL, PICK_FACTOR, PLAYER_SIZE,
                         PLAYER_SPEED, POWERUP_CHANCE, POWERUP_DURATION,
@@ -236,16 +235,11 @@ class Game:
             m[1] -= dt
         self.messages = [m for m in self.messages if m[1] > 0]
 
-    # -- grūtība pēc distances un veiksme -----------------------------
-    def hardness_mult(self, col):
-        """Bloku cietības reizinātājs rūtij `col` (aug ar attālumu no starta)."""
-        d = max(0, col - START_COL)
-        return min(HARDNESS_MAX_MULT, 1 + HARDNESS_PER_TILE * d)
-
+    # -- sienas ātrums un veiksme -----------------------------
     def mine_time(self, tile):
         """Sekundes, kas vajadzīgas, lai izrakt bloku šajā rūtī."""
         base = BLOCKS[self.world.blocks[tile]][1]
-        return base * self.mine_mult() * self.hardness_mult(tile[0])
+        return base * self.mine_mult()
 
     def wall_speed(self):
         """Sienas ātrums (px/s) aug ar nogājušo distanci."""

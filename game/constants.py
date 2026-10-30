@@ -11,9 +11,9 @@ WALL_SPEED_START = 18          # sienas sākuma ātrums (px/s)
 WALL_SPEED_PER_TILE = 0.2      # +px/s par katru nogājušo rūti (distanci)
 WALL_SPEED_MAX = 140           # augšējā robeža (spēlētājs bez zābakiem iet 150 px/s)
 
-# bloku cietība aug līdz ar distanci: racšanas laiks * (1 + HARDNESS_PER_TILE * rūtis no starta)
-HARDNESS_PER_TILE = 0.003
-HARDNESS_MAX_MULT = 6.0
+# bloku veidi mainās līdz ar distanci: zeme -> akmens -> slate (ciets akmens)
+BLOCK_TIER_DIST = 150          # rūtis starp pakāpēm: 0 = zeme, 150 = akmens, 300+ = slate
+GOLD_CHANCE = 0.05             # zelta bloka varbūtība jebkurā distancē
 
 SAFE_COLS = 7
 
