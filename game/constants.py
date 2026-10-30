@@ -1,5 +1,3 @@
-"""Spēles konstantes (bez pygame)."""
-
 TILE = 30
 COLS, ROWS = 32, 18            # redzamais laukums rūtīs
 WIDTH, HEIGHT = COLS * TILE, ROWS * TILE
@@ -9,9 +7,13 @@ PLAYER_SPEED = 150             # pikseļi sekundē
 REACH = 2.2                    # peles sasniedzamība rūtīs
 
 WALL_START_X = TILE
-WALL_SPEED_START = 18
-WALL_SPEED_GAIN = 0.8
-WALL_SPEED_MAX = 90
+WALL_SPEED_START = 18          # sienas sākuma ātrums (px/s)
+WALL_SPEED_PER_TILE = 0.2      # +px/s par katru nogājušo rūti (distanci)
+WALL_SPEED_MAX = 140           # augšējā robeža (spēlētājs bez zābakiem iet 150 px/s)
+
+# bloku cietība aug līdz ar distanci: racšanas laiks * (1 + HARDNESS_PER_TILE * rūtis no starta)
+HARDNESS_PER_TILE = 0.003
+HARDNESS_MAX_MULT = 6.0
 
 SAFE_COLS = 7
 
@@ -31,10 +33,29 @@ SHOP_HALF = 2                  # veikala telpa: 2 rūtis katrā pusē
 
 # uzlabojumi: atslēga -> (nosaukums, bāzes cena, cenas pieaugums par līmeni, maks. līmenis)
 UPGRADES = {
-    "pick": ("Kaplis: ātrāka racšana", 3, 2, 8),
-    "boots": ("Zābaki: ātrāka kustība", 3, 2, 5),
-    "pushback": ("Sienas atgrūšana", 4, 2, 99),
+    "pick": ("Kaplis: ātrāka racšana", 3, 2, 999),
+    "boots": ("Zābaki: ātrāka kustība", 3, 2, 999),
+    "pushback": ("Sienas atgrūšana", 4, 2, 999),
+    "luck": ("Veiksme: biežāki power-up", 4, 3, 25),
 }
+POWERUP_LUCK_BONUS = 0.01      # +1% power-up varbūtības par līmeni
+POWERUP_CHANCE_MAX = 0.5
 PICK_FACTOR = 0.85             # racšanas laiks * 0.85 par līmeni
 BOOT_BONUS = 0.10              # +10% ātruma par līmeni
 PUSHBACK_TILES = 5             # cik rūtis siena tiek atgrūsta
+
+# power-up, kas retumis izkrīt no izraktiem blokiem (un var sakrāties)
+POWERUP_CHANCE = 0.02          # varbūtība, ka izrakts bloks dod power-up
+POWERUP_DURATION = 10.0        # sekundes katram power-up "kaudzītim"
+POWERUP_MAX_STACKS = 4         # cik maksimāli var sakrāties no viena veida
+EFFECT_TTL = 0.35              # vizuālā efekta ilgums (sekundes)
+MESSAGE_TTL = 1.6              # paziņojuma ilgums (sekundes)
+BLAST_BASE_RADIUS = 1          # sprādziena rādiuss = 1 + kaudzīšu skaits
+
+# veids -> (nosaukums, krāsa)
+#  "area"  - katrs izrakts bloks izrok arī apkārtējos: 1 kaudzīte = 3x3, 2 = 5x5, ...
+#  "blast" - katrs izrakts bloks uzsprāgst: 1 kaudzīte = rādiuss 2, 2 = rādiuss 3, ...
+POWERUPS = {
+    "area": ("3x3 racšana", (120, 220, 255)),
+    "blast": ("Sprādziens", (255, 150, 40)),
+}

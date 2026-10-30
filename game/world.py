@@ -1,4 +1,3 @@
-"""Bezgalīgi ģenerējamā bloku pasaule."""
 import random
 
 from .constants import ROWS, SAFE_COLS, SHOP_EVERY, SHOP_HALF, START_COL

@@ -1,13 +1,10 @@
-"""pygame klients: ievade, zīmēšana, sakari ar API.
-Palaist no mapes `spele/`:  python -m client.main
-"""
 import os
 
 import pygame
 from pygame.locals import *
 
-from game import (BLOCKS, COLS, HEIGHT, PLAYER_SIZE, ROWS, TILE, UPGRADES,
-                  WIDTH, Game, Input, shop_col_near)
+from game import (BLOCKS, COLS, EFFECT_TTL, HEIGHT, PLAYER_SIZE, POWERUPS,
+                  ROWS, TILE, UPGRADES, WIDTH, Game, Input, shop_col_near)
 
 from . import api_client
 
@@ -69,6 +66,23 @@ def draw_shop_room(screen, col, cam_x, small):
         screen.blit(label, label.get_rect(midbottom=(stall.centerx, stall.top - 4)))
 
 
+def draw_effects(screen, game, cam_x):
+    for e in game.effects:
+        frac = 1 - e["ttl"] / EFFECT_TTL            # 0 -> 1
+        alpha = max(0, int(220 * (1 - frac)))
+        size = (2 * e["r"] + 1) * TILE
+        centre = (e["col"] * TILE + TILE // 2 - cam_x, e["row"] * TILE + TILE // 2)
+        surf = pygame.Surface((size, size), SRCALPHA)
+        if e["kind"] == "blast":
+            rad = int(size / 2 * (0.35 + 0.65 * frac))
+            pygame.draw.circle(surf, (255, 150, 40, alpha), (size // 2, size // 2), rad)
+            pygame.draw.circle(surf, (255, 240, 160, alpha), (size // 2, size // 2), rad, 3)
+        else:
+            pygame.draw.rect(surf, (120, 220, 255, alpha // 2), surf.get_rect())
+            pygame.draw.rect(surf, (210, 245, 255, alpha), surf.get_rect(), 3)
+        screen.blit(surf, surf.get_rect(center=centre))
+
+
 def draw_game(screen, game, textures, cam_x, font, small):
     screen.fill(EMPTY)
     first = int(cam_x // TILE)
@@ -90,7 +104,7 @@ def draw_game(screen, game, textures, cam_x, font, small):
                     pygame.draw.circle(screen, (255, 235, 130), r.center, 5)
 
     if game.mine_target in game.world.blocks:
-        hardness = BLOCKS[game.world.blocks[game.mine_target]][1]
+        hardness = game.mine_time(game.mine_target)
         frac = min(1.0, game.mine_progress / hardness)
         c, r = game.mine_target
         rect = pygame.Rect(c * TILE - cam_x, r * TILE, TILE, TILE)
@@ -111,6 +125,8 @@ def draw_game(screen, game, textures, cam_x, font, small):
         pygame.draw.rect(screen, (30, 60, 110), p, 2, border_radius=4)
         pygame.draw.circle(screen, (255, 255, 255), (p.centerx + fx * 6, p.centery + fy * 6), 3)
 
+    draw_effects(screen, game, cam_x)
+
     wx = int(game.wall_x - cam_x)
     if wx > 0:
         pygame.draw.rect(screen, (150, 30, 30), (0, 0, wx, HEIGHT))
@@ -122,6 +138,18 @@ def draw_game(screen, game, textures, cam_x, font, small):
     screen.blit(small.render(f"Distance: {game.distance} m", True, (220, 220, 220)), (WIDTH - 230, 72))
     screen.blit(small.render(f"Nākamais veikals: {game.next_shop_distance()} m", True, (170, 170, 180)), (WIDTH - 230, 94))
     screen.blit(small.render(f"Laiks: {game.time:0.1f}s", True, (170, 170, 180)), (WIDTH - 230, 116))
+
+    screen.blit(small.render(f"Siena: {game.wall_speed():.0f} px/s", True, (230, 120, 120)), (WIDTH - 230, 138))
+    screen.blit(small.render(f"Cietība: x{game.hardness_mult(game.player.centerx // TILE):.2f}", True, (170, 170, 180)), (WIDTH - 230, 160))
+    y = 188
+    for key, (pname, pcolor) in POWERUPS.items():
+        timers = game.powerups[key]
+        if timers:
+            screen.blit(small.render(f"{pname} x{len(timers)}  {max(timers):0.1f}s", True, pcolor),
+                        (WIDTH - 230, y))
+            y += 22
+    for i, (text, _) in enumerate(game.messages):
+        draw_centered(screen, font.render(text, True, (255, 255, 255)), HEIGHT // 4 + i * 34)
 
     if game.alive and game.shop_here() is not None:
         draw_centered(screen, font.render("Nospied E, lai atvērtu veikalu", True, (255, 230, 150)), HEIGHT - 70)
@@ -135,7 +163,7 @@ def draw_game(screen, game, textures, cam_x, font, small):
         draw_centered(screen, small.render("Enter: spēlēt vēlreiz    Esc: izvēlne", True, (220, 220, 220)), HEIGHT // 2 + 50)
 
 
-SHOP_KEYS = [K_1, K_2, K_3]
+SHOP_KEYS = [K_1, K_2, K_3, K_4]
 UPGRADE_KEYS = list(UPGRADES)
 
 
@@ -143,7 +171,7 @@ def draw_shop(screen, game, font, small):
     shade = pygame.Surface((WIDTH, HEIGHT), SRCALPHA)
     shade.fill((0, 0, 0, 170))
     screen.blit(shade, (0, 0))
-    panel = pygame.Rect(0, 0, 620, 340)
+    panel = pygame.Rect(0, 0, 620, 410)
     panel.center = (WIDTH // 2, HEIGHT // 2)
     pygame.draw.rect(screen, (50, 46, 60), panel, border_radius=10)
     pygame.draw.rect(screen, (255, 220, 140), panel, 2, border_radius=10)
@@ -162,7 +190,7 @@ def draw_shop(screen, game, font, small):
         price = "MAKS." if cost is None else f"{cost} zelts"
         p = font.render(price, True, color)
         screen.blit(p, p.get_rect(topright=(panel.right - 24, y)))
-    screen.blit(small.render("1-3: pirkt      E / Esc: aizvērt", True, (200, 200, 210)),
+    screen.blit(small.render("1-4: pirkt      E / Esc: aizvērt", True, (200, 200, 210)),
                 (panel.x + 24, panel.bottom - 36))
 
 

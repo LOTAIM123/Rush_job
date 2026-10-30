@@ -1,4 +1,3 @@
-"""Sūta rezultātus uz API un ielādē labāko sarakstu. Kļūdas netraucē spēlei."""
 import json
 import os
 import threading
