@@ -1,7 +1,8 @@
 import random
 
-from .constants import (BLOCK_TIER_DIST, GOLD_CHANCE, ROWS, SAFE_COLS,
-                        SHOP_EVERY, SHOP_HALF, START_COL)
+from .constants import (BLOCK_TIER_DIST, ROWS, SAFE_COLS, SHOP_EVERY,
+                        SHOP_HALF, START_COL, VEIN_CHANCE, VEIN_SIZE_MAX,
+                        VEIN_SIZE_MIN)
 
 
 def shop_col_near(col):
@@ -19,20 +20,35 @@ class World:
         self.rng = rng or random.Random()
         self.blocks = {}
         self.generated_to = -1
+        self.vein_tiles = set()         # zelta rūtis nākamajās kolonnās
+
+    def seed_vein(self, col):
+        """Zelta dzīsla: saaugusi rūšu grupa, kas stiepjas uz priekšu (pa labi)."""
+        size = self.rng.randint(VEIN_SIZE_MIN, VEIN_SIZE_MAX)
+        tiles = {(col, self.rng.randrange(ROWS))}
+        for _ in range(size * 8):
+            if len(tiles) >= size:
+                break
+            c, r = self.rng.choice(sorted(tiles))
+            dc, dr = self.rng.choice(((1, 0), (1, 0), (0, 1), (0, -1)))
+            if 0 <= r + dr < ROWS:
+                tiles.add((c + dc, r + dr))
+        self.vein_tiles |= tiles
 
     def generate_column(self, col):
-        if shop_col_near(col) is not None:
-            return                      # veikala telpa paliek tukša
-        for row in range(ROWS):
-            if col < SAFE_COLS:
-                if self.rng.random() < 0.08:
-                    self.blocks[(col, row)] = 1
-                continue
-            if self.rng.random() < GOLD_CHANCE:
-                kind = 4
-            else:
-                kind = self.pick_tier(col)
-            self.blocks[(col, row)] = kind
+        shop = shop_col_near(col) is not None
+        if not shop and col >= SAFE_COLS and self.rng.random() < VEIN_CHANCE:
+            self.seed_vein(col)
+        if not shop:
+            for row in range(ROWS):
+                if col < SAFE_COLS:
+                    if self.rng.random() < 0.08:
+                        self.blocks[(col, row)] = 1
+                    continue
+                kind = 4 if (col, row) in self.vein_tiles else self.pick_tier(col)
+                self.blocks[(col, row)] = kind
+        # veikala telpa paliek tukša; izlietotās dzīslu rūtis vairs nav vajadzīgas
+        self.vein_tiles = {t for t in self.vein_tiles if t[0] > col}
 
     def pick_tier(self, col):
         """Zeme (1) sākumā, tad akmens (2), tālāk slate (3): vienmērīga pāreja."""

@@ -3,11 +3,12 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 from .constants import (BLAST_BASE_RADIUS, BLOCKS, BOOT_BONUS, COLS,
+                        GOLDRUSH_GOLD, POWERUP_TIME_CAP, SPEED_PU_BONUS,
                         POWERUP_CHANCE_MAX, POWERUP_LUCK_BONUS,
                         EFFECT_TTL, MESSAGE_TTL, PICK_FACTOR, PLAYER_SIZE,
                         PLAYER_SPEED, POWERUP_CHANCE, POWERUP_DURATION,
                         POWERUP_MAX_STACKS, POWERUPS, PUSHBACK_TILES, REACH,
-                        ROWS, START_COL, TILE, UPGRADES, WALL_SPEED_MAX,
+                        ROWS, S, START_COL, TILE, UPGRADES, WALL_SPEED_MAX,
                         WALL_SPEED_PER_TILE, WALL_SPEED_START, WALL_START_X)
 from .world import World, shop_col_near
 
@@ -100,8 +101,8 @@ class Game:
     # -- racšana ------------------------------------------------------
     def facing_tile(self):
         fx, fy = self.facing
-        px = self.player.centerx + fx * (PLAYER_SIZE // 2 + 4)
-        py = self.player.centery + fy * (PLAYER_SIZE // 2 + 4)
+        px = self.player.centerx + fx * (PLAYER_SIZE // 2 + round(4 * S))
+        py = self.player.centery + fy * (PLAYER_SIZE // 2 + round(4 * S))
         return (px // TILE, py // TILE)
 
     def in_reach(self, tile):
@@ -153,7 +154,7 @@ class Game:
         return PICK_FACTOR ** self.levels["pick"]
 
     def speed_mult(self):
-        return 1 + BOOT_BONUS * self.levels["boots"]
+        return 1 + BOOT_BONUS * self.levels["boots"] + SPEED_PU_BONUS * self.stacks("speed")
 
     def shop_here(self):
         """Veikala centra rūts, ja spēlētājs atrodas veikala telpā, citādi None."""
@@ -187,6 +188,8 @@ class Game:
         _, _, value, gold = BLOCKS[kind]
         self.score += value
         self.gold += gold
+        if self.stacks("goldrush"):
+            self.gold += GOLDRUSH_GOLD           # zelta drudzis: zelts par katru bloku
         return True
 
     def stacks(self, key):
@@ -218,6 +221,11 @@ class Game:
 
     def add_powerup(self, key):
         timers = self.powerups[key]
+        if POWERUPS[key][2] == "time":            # pagarina vienīgo taimeri
+            total = min(POWERUP_TIME_CAP, (timers[0] if timers else 0.0) + POWERUP_DURATION)
+            self.powerups[key] = [total]
+            self.messages.append([f"{POWERUPS[key][0]}! +{POWERUP_DURATION:.0f}s", MESSAGE_TTL])
+            return
         if len(timers) >= POWERUP_MAX_STACKS:
             timers.sort()
             timers[0] = POWERUP_DURATION          # pilns: atjauno īsāko
@@ -238,6 +246,8 @@ class Game:
     # -- sienas ātrums un veiksme -----------------------------
     def mine_time(self, tile):
         """Sekundes, kas vajadzīgas, lai izrakt bloku šajā rūtī."""
+        if self.stacks("insta"):
+            return 0.0                           # acumirklīga racšana
         base = BLOCKS[self.world.blocks[tile]][1]
         return base * self.mine_mult()
 

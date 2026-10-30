@@ -1,19 +1,22 @@
-TILE = 30
+TILE = 40                      # rūts izmērs pikseļos (logs = 1280x720)
+S = TILE / 30                  # mērogs: visi pikseļu lielumi ir pielāgoti rūts izmēram
 COLS, ROWS = 32, 18            # redzamais laukums rūtīs
 WIDTH, HEIGHT = COLS * TILE, ROWS * TILE
 
-PLAYER_SIZE = 22
-PLAYER_SPEED = 150             # pikseļi sekundē
+PLAYER_SIZE = round(22 * S)
+PLAYER_SPEED = 150 * S         # pikseļi sekundē (5 rūtis/s)
 REACH = 2.2                    # peles sasniedzamība rūtīs
 
 WALL_START_X = TILE
-WALL_SPEED_START = 18          # sienas sākuma ātrums (px/s)
-WALL_SPEED_PER_TILE = 0.2      # +px/s par katru nogājušo rūti (distanci)
-WALL_SPEED_MAX = 140           # augšējā robeža (spēlētājs bez zābakiem iet 150 px/s)
+WALL_SPEED_START = 18 * S      # sienas sākuma ātrums (px/s)
+WALL_SPEED_PER_TILE = 0.2 * S  # +px/s par katru nogājušo rūti (distanci)
+WALL_SPEED_MAX = 140 * S       # augšējā robeža (spēlētājs bez zābakiem iet 150 * S px/s)
 
 # bloku veidi mainās līdz ar distanci: zeme -> akmens -> slate (ciets akmens)
-BLOCK_TIER_DIST = 150          # rūtis starp pakāpēm: 0 = zeme, 150 = akmens, 300+ = slate
-GOLD_CHANCE = 0.05             # zelta bloka varbūtība jebkurā distancē
+BLOCK_TIER_DIST = 600          # rūtis starp pakāpēm: 0 = zeme, 600 = akmens, 1200+ = slate
+VEIN_CHANCE = 0.15             # varbūtība, ka kolonnā sākas zelta dzīsla
+VEIN_SIZE_MIN = 4              # dzīslas izmērs (rūtis)
+VEIN_SIZE_MAX = 8
 
 SAFE_COLS = 7
 
@@ -52,10 +55,20 @@ EFFECT_TTL = 0.35              # vizuālā efekta ilgums (sekundes)
 MESSAGE_TTL = 1.6              # paziņojuma ilgums (sekundes)
 BLAST_BASE_RADIUS = 1          # sprādziena rādiuss = 1 + kaudzīšu skaits
 
-# veids -> (nosaukums, krāsa)
+# veids -> (nosaukums, krāsa, režīms)
+#  režīms "power": katra paņemšana pievieno kaudzīti (stiprāks efekts, savs taimeris)
+#  režīms "time":  katra paņemšana pagarina taimeri (efekts nemainās, tikai ilgums)
+#  "speed" - +25% kustības ātruma par kaudzīti; "insta" - bloki tiek izrakti uzreiz;
+#  "goldrush" - katrs salauztais bloks dod +1 zelta
 #  "area"  - katrs izrakts bloks izrok arī apkārtējos: 1 kaudzīte = 3x3, 2 = 5x5, ...
 #  "blast" - katrs izrakts bloks uzsprāgst: 1 kaudzīte = rādiuss 2, 2 = rādiuss 3, ...
 POWERUPS = {
-    "area": ("3x3 racšana", (120, 220, 255)),
-    "blast": ("Sprādziens", (255, 150, 40)),
+    "area": ("3x3 racšana", (120, 220, 255), "power"),
+    "blast": ("Sprādziens", (255, 150, 40), "power"),
+    "speed": ("Ātrums", (120, 255, 140), "power"),
+    "insta": ("Acumirklīga racšana", (230, 120, 255), "time"),
+    "goldrush": ("Zelta drudzis", (255, 215, 80), "time"),
 }
+SPEED_PU_BONUS = 0.25          # +25% ātruma par "Ātrums" kaudzīti
+GOLDRUSH_GOLD = 1              # zelts par katru salauztu bloku zelta drudža laikā
+POWERUP_TIME_CAP = 40.0        # "time" režīma maksimālais kopējais ilgums (s)

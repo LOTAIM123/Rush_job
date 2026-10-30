@@ -12,6 +12,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEXTURE_FILES = {1: "dirt.png", 2: "stone.png", 3: "hard.png", 4: "gold.png"}
 PLAYER_TEXTURE_FILE = "player.png"
 EMPTY = (62, 56, 66)
+MENU_OY = (HEIGHT - 540) // 2     # izvēlne ir veidota 540 px augstumam: centrējam
 MAX_NAME = 12
 
 
@@ -110,7 +111,7 @@ def draw_game(screen, game, textures, cam_x, font, small):
 
     if game.mine_target in game.world.blocks:
         hardness = game.mine_time(game.mine_target)
-        frac = min(1.0, game.mine_progress / hardness)
+        frac = 1.0 if hardness <= 0 else min(1.0, game.mine_progress / hardness)
         c, r = game.mine_target
         rect = pygame.Rect(c * TILE - cam_x, r * TILE, TILE, TILE)
         for i in range(int(frac * 5) + 1):
@@ -146,10 +147,11 @@ def draw_game(screen, game, textures, cam_x, font, small):
 
     screen.blit(small.render(f"Siena: {game.wall_speed():.0f} px/s", True, (230, 120, 120)), (WIDTH - 230, 138))
     y = 166
-    for key, (pname, pcolor) in POWERUPS.items():
+    for key, (pname, pcolor, mode) in POWERUPS.items():
         timers = game.powerups[key]
         if timers:
-            screen.blit(small.render(f"{pname} x{len(timers)}  {max(timers):0.1f}s", True, pcolor),
+            stack = f" x{len(timers)}" if mode == "power" else ""
+            screen.blit(small.render(f"{pname}{stack}  {max(timers):0.1f}s", True, pcolor),
                         (WIDTH - 230, y))
             y += 22
     for i, (text, _) in enumerate(game.messages):
@@ -201,8 +203,8 @@ def draw_shop(screen, game, font, small):
 def draw_menu(screen, fonts, buttons, name, board):
     title_font, font, small = fonts
     screen.fill((50, 50, 58))
-    draw_centered(screen, title_font.render("RUSH JOB", True, (255, 210, 80)), 40)
-    draw_centered(screen, small.render("Izrok ceļu, pirms siena tevi sasmalcina!", True, (210, 210, 210)), 105)
+    draw_centered(screen, title_font.render("RUSH JOB", True, (255, 210, 80)), 40 + MENU_OY)
+    draw_centered(screen, small.render("Izrok ceļu, pirms siena tevi sasmalcina!", True, (210, 210, 210)), 105 + MENU_OY)
 
     mouse = pygame.mouse.get_pos()
     for rect, label in buttons:
@@ -213,14 +215,14 @@ def draw_menu(screen, fonts, buttons, name, board):
         txt = font.render(label, True, (255, 255, 255))
         screen.blit(txt, txt.get_rect(center=rect.center))
 
-    draw_centered(screen, small.render(f"Vārds: {name}_", True, (255, 255, 255)), 345)
+    draw_centered(screen, small.render(f"Vārds: {name}_", True, (255, 255, 255)), 345 + MENU_OY)
 
-    draw_centered(screen, small.render("Labākie rezultāti", True, (255, 210, 80)), 385)
+    draw_centered(screen, small.render("Labākie rezultāti", True, (255, 210, 80)), 385 + MENU_OY)
     if board.error:
-        draw_centered(screen, small.render("(serveris nav pieejams)", True, (170, 170, 180)), 412)
+        draw_centered(screen, small.render("(serveris nav pieejams)", True, (170, 170, 180)), 412 + MENU_OY)
     for i, row in enumerate(board.rows[:5]):
         line = f"{i + 1}. {row['name']} - {row['score']}"
-        draw_centered(screen, small.render(line, True, (220, 220, 220)), 412 + i * 22)
+        draw_centered(screen, small.render(line, True, (220, 220, 220)), 412 + MENU_OY + i * 22)
     draw_centered(screen, small.render(
         "Kustība: bultiņas/WASD   Racšana: Space vai pele   E: veikals", True, (150, 150, 160)), HEIGHT - 26)
 
@@ -234,9 +236,9 @@ def main():
     font, small = fonts[1], fonts[2]
 
     start_btn = pygame.Rect(0, 0, 240, 54)
-    start_btn.center = (WIDTH // 2, 195)
+    start_btn.center = (WIDTH // 2, 195 + MENU_OY)
     quit_btn = pygame.Rect(0, 0, 240, 54)
-    quit_btn.center = (WIDTH // 2, 262)
+    quit_btn.center = (WIDTH // 2, 262 + MENU_OY)
     buttons = [(start_btn, "Sākt"), (quit_btn, "Iziet")]
 
     textures = load_textures()
