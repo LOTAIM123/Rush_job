@@ -1,16 +1,23 @@
 """Skaņa: mūzika un efekti (bloka salūšana, nāve).
 
-Ja mapē client/sounds/ ir faili, tiek lietoti tie (neobligāti):
-    break.wav   - skaņa, kad salūst jebkurš bloks
-    death.wav   - skaņa, kad spēlētājs mirst
-    music.ogg / music.mp3 / music.wav - fona mūzika (cikliski)
-Ja failu nav, skaņas tiek sintezētas kodā, tāpēc ārēji faili nav vajadzīgi.
+Skaņas tiek ielādētas no FAILIEM mapē client/sounds/ (.mp3, .ogg vai .wav):
+    music.mp3                - fona mūzika (cikliski)
+    break.mp3                - skaņa, kad salūst jebkurš bloks
+    break_dirt.mp3, break_stone.mp3, break_slate.mp3, break_gold.mp3, break_brambles.mp3
+                             - (neobligāti) atsevišķa skaņa konkrētam blokam
+    death.mp3                - skaņa, kad spēlētājs mirst
+    death_wall.mp3, death_lava.mp3 - (neobligāti) atsevišķa skaņa sienai / lavai
+Vienam nosaukumam var būt vairākas versijas (break1.mp3, break2.mp3 ...) - tiek izvēlēta nejauša.
+
+Ja mapē NAV neviena skaņas faila, tiek lietotas kodā sintezētas skaņas (lai spēle nebūtu mēma).
+Ja mapē ir kaut viens fails, sintezētās skaņas netiek lietotas: kam nav faila, tas paliek kluss.
 Ja nav audio ierīces, viss darbojas kā "klusais režīms" un spēle netraucēti iet tālāk.
 """
 import array
 import math
 import os
 import random
+import sys
 import threading
 import time
 
@@ -19,6 +26,8 @@ import pygame
 MUSIC_VOLUME = 0.30
 SFX_VOLUME = 0.55
 MIN_GAP_MS = 45                 # minimālais starplaiks vienam skaņas veidam
+EXTS = ("mp3", "ogg", "wav")
+BLOCK_NAMES = {1: "dirt", 2: "stone", 3: "slate", 4: "gold", 6: "brambles"}
 
 # bloka veids -> (toņa frekvence, ilgums s, trokšņa daļa, trokšņa filtrs)
 BREAK_SPECS = {
@@ -50,11 +59,11 @@ class Audio:
         self._music_file = None
         self.sounds = {}
         self._last = {}
-        self.rate, self.channels = 22050, 1
+        self.rate, self.channels = 44100, 2
         self.channel = None
         try:
             if not pygame.mixer.get_init():
-                pygame.mixer.init(22050, -16, 1, 512)
+                pygame.mixer.init(44100, -16, 2, 512)
             freq, size, chans = pygame.mixer.get_init()
             if size != -16:
                 return                      # neatbalstīts formāts: klusais režīms
@@ -66,14 +75,14 @@ class Audio:
             return
 
         self.dir = os.path.join(base_dir, "sounds")
+        # sintezētās skaņas tikai tad, ja mapē vispār nav neviena skaņas faila
+        self.use_synth = not self._has_audio_files()
         self._load_effects()
-        for ext in ("ogg", "mp3", "wav"):
-            path = os.path.join(self.dir, f"music.{ext}")
-            if os.path.exists(path):
-                self._music_file = path
-                break
-        if self._music_file is None:
+        music = self._files("music")
+        self._music_file = music[0] if music else None
+        if self._music_file is None and self.use_synth:
             threading.Thread(target=self._build_music, daemon=True).start()
+        self._report()
 
     # ------------------------------------------------------------ publiskais
     def play_music(self):
@@ -100,8 +109,11 @@ class Audio:
             try:
                 pygame.mixer.music.load(self._music_file)
                 pygame.mixer.music.play(-1)
-            except pygame.error:
+            except pygame.error as e:
+                self._warn(self._music_file, e)
                 self._music_file = None
+                if self.use_synth:
+                    threading.Thread(target=self._build_music, daemon=True).start()
                 return
         elif self._music_sound is not None:
             self.channel.play(self._music_sound, loops=-1)
@@ -150,30 +162,62 @@ class Audio:
         snd.set_volume(volume)
         return snd
 
-    def _load_file(self, name):
-        path = os.path.join(self.dir, name)
-        if os.path.exists(path):
+    def _has_audio_files(self):
+        try:
+            return any(f.lower().endswith(EXTS) for f in os.listdir(self.dir))
+        except OSError:
+            return False
+
+    def _files(self, base):
+        """Visi faili ar nosaukumu `base`, `base1`..`base9` (mp3/ogg/wav)."""
+        found = []
+        for name in [base] + [f"{base}{i}" for i in range(1, 10)]:
+            for ext in EXTS:
+                path = os.path.join(self.dir, f"{name}.{ext}")
+                if os.path.exists(path):
+                    found.append(path)
+                    break
+        return found
+
+    def _warn(self, path, err):
+        print(f"[skaņa] Neizdevās ielādēt {os.path.basename(path)}: {err}", file=sys.stderr)
+
+    def _load_sounds(self, paths):
+        sounds = []
+        for path in paths:
             try:
                 snd = pygame.mixer.Sound(path)
                 snd.set_volume(SFX_VOLUME)
-                return snd
-            except pygame.error:
-                pass
-        return None
+                sounds.append(snd)
+            except pygame.error as e:
+                self._warn(path, e)
+        return sounds
 
     def _load_effects(self):
         rng = random.Random(7)
-        file_break = self._load_file("break.wav")
-        for kind in (1, 2, 3, 4, 6):
-            if file_break:
-                self.sounds[("break", kind)] = [file_break]
-            else:
-                self.sounds[("break", kind)] = [
-                    self._make_sound(self._synth_break(kind, rng)) for _ in range(3)]
-        file_death = self._load_file("death.wav")
+        generic = self._load_sounds(self._files("break"))
+        for kind, name in BLOCK_NAMES.items():
+            snds = self._load_sounds(self._files(f"break_{name}")) or generic
+            if not snds and self.use_synth:
+                snds = [self._make_sound(self._synth_break(kind, rng)) for _ in range(3)]
+            if snds:
+                self.sounds[("break", kind)] = snds
+        generic = self._load_sounds(self._files("death"))
         for cause in ("wall", "lava"):
-            self.sounds[("death", cause)] = [
-                file_death or self._make_sound(self._synth_death(cause, rng))]
+            snds = self._load_sounds(self._files(f"death_{cause}")) or generic
+            if not snds and self.use_synth:
+                snds = [self._make_sound(self._synth_death(cause, rng))]
+            if snds:
+                self.sounds[("death", cause)] = snds
+
+    def _report(self):
+        if self.use_synth:
+            print("[skaņa] Mapē client/sounds nav failu: tiek lietotas sintezētās skaņas.")
+            return
+        music = os.path.basename(self._music_file) if self._music_file else "nav"
+        brk = len(self.sounds.get(("break", 1), []))
+        print(f"[skaņa] mūzika: {music}; bloku skaņas: {'ir' if brk else 'nav'}; "
+              f"nāves skaņa: {'ir' if ('death', 'wall') in self.sounds else 'nav'}")
 
     # ------------------------------------------------------------ sintēze
     def _noise(self, n, rng, a):

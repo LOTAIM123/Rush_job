@@ -25,9 +25,20 @@ Power-up var izkrist tikai no tieši izrakta bloka, nevis no sprādzienā izpost
 - **Lava** — nogalina uzreiz, ja tai pieskaries; to nevar izrakt, un sprādzieni to neskar. Parādās no ~25. rūts, ar distanci aizvien biežāk.
 - **Ērkšķu krūmi** — palēnina kustību līdz 40%; tos var ātri izrakt.
 
-## Skaņa
+## Skaņa (mp3 / ogg / wav)
 
-- Fona mūzika, skaņa katram salauztam blokam (atšķiras pēc bloka veida) un skaņa nāves brīdī.
+Ieliec savus failus mapē `client/sounds/` (mapi izveido pats):
+
+| Fails | Kad skan |
+|---|---|
+| `music.mp3` | fona mūzika (cikliski) |
+| `break.mp3` | jebkura bloka salūšana |
+| `break_dirt.mp3`, `break_stone.mp3`, `break_slate.mp3`, `break_gold.mp3`, `break_brambles.mp3` | (neobligāti) konkrēta bloka salūšana, aizstāj `break.mp3` |
+| `death.mp3` | spēlētāja nāve |
+| `death_wall.mp3`, `death_lava.mp3` | (neobligāti) nāve no sienas / lavas |
+
+- Vienam nosaukumam var būt vairākas versijas (`break1.mp3`, `break2.mp3` ...): katru reizi tiek izvēlēta nejauša.
+- Der arī `.ogg` un `.wav`.
+- Ja mapē ir kaut viens fails, sintezētās skaņas netiek lietotas: kam nav faila, tas paliek kluss. Ja mape ir tukša, spēle lieto iebūvētās sintezētās skaņas.
 - **M** (spēlē) vai **F2** (jebkur) — ieslēgt/izslēgt skaņu.
-- Ārēji faili nav vajadzīgi: skaņas tiek sintezētas kodā (`client/audio.py`). Ja gribi savas, ieliec mapē `client/sounds/`:
-  `break.wav`, `death.wav`, `music.ogg` (vai `.mp3`/`.wav`) — tie aizstās iebūvētās.
+- Konsolē startā redzams, kuri faili ielādēti; ja fails nelādējas, tiek izvadīts brīdinājums.
