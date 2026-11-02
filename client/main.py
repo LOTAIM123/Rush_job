@@ -173,7 +173,7 @@ def draw_game(screen, game, textures, cam_x, font, small):
         title = "SADEGA LAVĀ!" if game.death_cause == "lava" else "SADRUMSTS!"
         draw_centered(screen, font.render(title, True, (255, 90, 90)), HEIGHT // 2 - 50)
         draw_centered(screen, font.render(f"Rezultāts: {game.score}", True, (255, 255, 255)), HEIGHT // 2)
-        draw_centered(screen, small.render("Enter: spēlēt vēlreiz    Esc: izvēlne", True, (220, 220, 220)), HEIGHT // 2 + 50)
+        draw_centered(screen, small.render("Enter: spēlēt vēlreiz    Esc: Iziet", True, (220, 220, 220)), HEIGHT // 2 + 50)
 
 
 SHOP_KEYS = [K_1, K_2, K_3, K_4]
@@ -211,7 +211,7 @@ def draw_menu(screen, fonts, buttons, name, board):
     title_font, font, small = fonts
     screen.fill((50, 50, 58))
     draw_centered(screen, title_font.render("RUSH JOB", True, (255, 210, 80)), 40 + MENU_OY)
-    draw_centered(screen, small.render("Izrok ceļu, pirms siena tevi sasmalcina!", True, (210, 210, 210)), 105 + MENU_OY)
+    draw_centered(screen, small.render("Skien no sienas, dabū zeltu.", True, (210, 210, 210)), 105 + MENU_OY)
 
     mouse = pygame.mouse.get_pos()
     for rect, label in buttons:
