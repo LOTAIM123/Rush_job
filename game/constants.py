@@ -28,7 +28,25 @@ BLOCKS = {
     2: ((120, 120, 125), 0.25, 2, 0),    # akmens
     3: ((70, 70, 85), 1.1, 4, 0),        # ciets akmens
     4: ((235, 190, 50), 0.1, 10, 1),     # zelts (+1 zelts kā nauda)
+    5: ((200, 25, 25), 0.0, 0, 0),       # lava: nogalina uzreiz, nav izrokama
+    6: ((55, 115, 50), 1.5, 0, 0),       # ērkšķu krūmi: palēnina, ātri izrokami
 }
+LAVA, BRAMBLES = 5, 6
+NON_SOLID = {LAVA, BRAMBLES}   # pa tiem var iet (lava nogalina, krūmi palēnina)
+UNBREAKABLE = {LAVA}           # neizrokami un sprādzieni tos neskar
+
+BRAMBLE_SLOW = 0.4             # kustības ātrums krūmos (40%)
+SPLASH_DAMAGE = 0.25            # 3x3 un sprādziena bojājums: puse no bloka izturības
+
+# lava un krūmi veidojas ģenerētos plankumos (kā zelta dzīslas)
+LAVA_MIN_COL = 25              # lavas nav tuvu startam
+LAVA_CHANCE_BASE = 0.04        # varbūtība kolonnā; aug ar distanci
+LAVA_CHANCE_PER_TILE = 0.0001
+LAVA_CHANCE_MAX = 0.15
+LAVA_SIZE = (4, 8)
+BRAMBLE_MIN_COL = 12
+BRAMBLE_CHANCE = 0.07
+BRAMBLE_SIZE = (3, 7)
 
 # veikali
 SHOP_EVERY = 100               # veikals ik pēc 100 distances (rūtīm)
@@ -38,14 +56,15 @@ SHOP_HALF = 2                  # veikala telpa: 2 rūtis katrā pusē
 UPGRADES = {
     "pick": ("Kaplis: ātrāka racšana", 3, 2, 999),
     "boots": ("Zābaki: ātrāka kustība", 3, 2, 999),
-    "pushback": ("Sienas atgrūšana", 4, 2, 999),
+    "slowwall": ("Siena: lēnāka kustība", 4, 2, 15),
     "luck": ("Veiksme: biežāki power-up", 4, 3, 25),
 }
 POWERUP_LUCK_BONUS = 0.01      # +1% power-up varbūtības par līmeni
 POWERUP_CHANCE_MAX = 0.5
 PICK_FACTOR = 0.85             # racšanas laiks * 0.85 par līmeni
 BOOT_BONUS = 0.10              # +10% ātruma par līmeni
-PUSHBACK_TILES = 5             # cik rūtis siena tiek atgrūsta
+WALL_SLOW_PER_LEVEL = 0.05     # sienas ātrums -5% par līmeni
+WALL_SLOW_MIN_MULT = 0.25      # ne lēnāk kā 25% no parastā (15 līmeņi)
 
 # power-up, kas retumis izkrīt no izraktiem blokiem (un var sakrāties)
 POWERUP_CHANCE = 0.02          # varbūtība, ka izrakts bloks dod power-up
@@ -59,9 +78,9 @@ BLAST_BASE_RADIUS = 1          # sprādziena rādiuss = 1 + kaudzīšu skaits
 #  režīms "power": katra paņemšana pievieno kaudzīti (stiprāks efekts, savs taimeris)
 #  režīms "time":  katra paņemšana pagarina taimeri (efekts nemainās, tikai ilgums)
 #  "speed" - +25% kustības ātruma par kaudzīti; "insta" - bloki tiek izrakti uzreiz;
-#  "goldrush" - katrs salauztais bloks dod +1 zelta
-#  "area"  - katrs izrakts bloks izrok arī apkārtējos: 1 kaudzīte = 3x3, 2 = 5x5, ...
-#  "blast" - katrs izrakts bloks uzsprāgst: 1 kaudzīte = rādiuss 2, 2 = rādiuss 3, ...
+#  "goldrush" - katrs TIEŠI IZRAKTAIS bloks dod +1 zelta (ne sprādzienā/3x3 salauztie)
+#  "area"  - katrs izrakts bloks bojā apkārtējos (puse bojājuma): 1 kaudzīte = 3x3, 2 = 5x5, ...
+#  "blast" - katrs izrakts bloks uzsprāgst un bojā (puse bojājuma): 1 kaudzīte = rādiuss 2, 2 = rādiuss 3, ...
 POWERUPS = {
     "area": ("3x3 racšana", (120, 220, 255), "power"),
     "blast": ("Sprādziens", (255, 150, 40), "power"),
@@ -69,6 +88,6 @@ POWERUPS = {
     "insta": ("Acumirklīga racšana", (230, 120, 255), "time"),
     "goldrush": ("Zelta drudzis", (255, 215, 80), "time"),
 }
-SPEED_PU_BONUS = 0.25          # +25% ātruma par "Ātrums" kaudzīti
-GOLDRUSH_GOLD = 1              # zelts par katru salauztu bloku zelta drudža laikā
-POWERUP_TIME_CAP = 40.0        # "time" režīma maksimālais kopējais ilgums (s)
+SPEED_PU_BONUS = 0.25         
+GOLDRUSH_GOLD = 0.5              
+POWERUP_TIME_CAP = 40.0       

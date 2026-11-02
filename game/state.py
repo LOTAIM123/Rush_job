@@ -2,13 +2,15 @@
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
-from .constants import (BLAST_BASE_RADIUS, BLOCKS, BOOT_BONUS, COLS,
-                        GOLDRUSH_GOLD, POWERUP_TIME_CAP, SPEED_PU_BONUS,
-                        POWERUP_CHANCE_MAX, POWERUP_LUCK_BONUS,
-                        EFFECT_TTL, MESSAGE_TTL, PICK_FACTOR, PLAYER_SIZE,
-                        PLAYER_SPEED, POWERUP_CHANCE, POWERUP_DURATION,
-                        POWERUP_MAX_STACKS, POWERUPS, PUSHBACK_TILES, REACH,
-                        ROWS, S, START_COL, TILE, UPGRADES, WALL_SPEED_MAX,
+from .constants import (BLAST_BASE_RADIUS, BLOCKS, BOOT_BONUS, BRAMBLE_SLOW,
+                        BRAMBLES, COLS, EFFECT_TTL, GOLDRUSH_GOLD, LAVA,
+                        MESSAGE_TTL, PICK_FACTOR, PLAYER_SIZE, PLAYER_SPEED,
+                        POWERUP_CHANCE, POWERUP_CHANCE_MAX, POWERUP_DURATION,
+                        POWERUP_LUCK_BONUS, POWERUP_MAX_STACKS,
+                        POWERUP_TIME_CAP, POWERUPS, REACH, ROWS, S,
+                        SPEED_PU_BONUS, SPLASH_DAMAGE, START_COL, TILE,
+                        UNBREAKABLE, UPGRADES, WALL_SLOW_MIN_MULT,
+                        WALL_SLOW_PER_LEVEL, WALL_SPEED_MAX,
                         WALL_SPEED_PER_TILE, WALL_SPEED_START, WALL_START_X)
 from .world import World, shop_col_near
 
@@ -57,9 +59,10 @@ class Game:
         self.wall_x = float(WALL_START_X)
         self.time = 0.0
         self.score = 0
-        self.mine_target = None
-        self.mine_progress = 0.0
+        self.damage = {}       # bojājums blokiem: (col, row) -> 0..1 (1 = salūst)
         self.alive = True
+        self.death_cause = None    # "wall" vai "lava"
+        self.events = []           # notikumi skaņai: ("break", veids), ("death", cēlonis)
         self.gold = 0
         self.distance = 0
         self.levels = {key: 0 for key in UPGRADES}
@@ -94,7 +97,7 @@ class Game:
             self.facing = (inp.move_x, 0)
         elif inp.move_y:
             self.facing = (0, inp.move_y)
-        step = PLAYER_SPEED * self.speed_mult() * dt
+        step = PLAYER_SPEED * self.speed_mult() * self.terrain_slow() * dt
         self.move_axis(round(inp.move_x * step), 0)
         self.move_axis(0, round(inp.move_y * step))
 
@@ -117,25 +120,23 @@ class Game:
         elif inp.mine_tile is not None and self.in_reach(inp.mine_tile):
             target = inp.mine_tile
 
-        if target is None or target not in self.world.blocks:
-            self.mine_target, self.mine_progress = None, 0.0
+        kind = self.world.blocks.get(target) if target is not None else None
+        if kind is None or kind in UNBREAKABLE:
             return
-        if target != self.mine_target:
-            self.mine_target, self.mine_progress = target, 0.0
-
-        hardness = self.mine_time(target)
-        self.mine_progress += dt
-        if self.mine_progress >= hardness:
-            self.break_block(target)
+        t = self.mine_time(target)
+        self.damage[target] = self.damage.get(target, 0.0) + (dt / t if t > 0 else 1.0)
+        if self.damage[target] >= 1.0:
+            self.break_block(target, direct=True)
             self.apply_powerups(target)
             self.roll_powerup_drop()
-            self.mine_target, self.mine_progress = None, 0.0
 
     # -- galvenais atjauninājums --------------------------------------
     def update(self, dt, inp):
         if not self.alive:
             return
         self.time += dt
+        if len(self.events) > 200:           # drošība, ja neviens tos neizlasa
+            self.events = self.events[-50:]
         self.tick_effects(dt)
         self.update_player(dt, inp)
         self.distance = max(self.distance, self.player.centerx // TILE - START_COL)
@@ -144,10 +145,15 @@ class Game:
         speed = self.wall_speed()
         self.wall_x += speed * dt
         if self.player.left < self.wall_x:
-            self.alive = False
+            self.alive, self.death_cause = False, "wall"
+            self.events.append(("death", "wall"))
+        elif LAVA in self.kinds_under(self.player, inset=round(4 * S)):
+            self.alive, self.death_cause = False, "lava"
+            self.events.append(("death", "lava"))
 
         self.world.ensure(self.player.centerx // TILE + COLS + 4)
         self.world.prune(int(self.wall_x // TILE) - 2)
+        self.damage = {k: v for k, v in self.damage.items() if k in self.world.blocks}
 
     # -- uzlabojumi un veikals ----------------------------------------
     def mine_mult(self):
@@ -175,22 +181,37 @@ class Game:
             return False
         self.gold -= cost
         self.levels[key] += 1
-        if key == "pushback":
-            self.wall_x = max(0.0, self.wall_x - PUSHBACK_TILES * TILE)
         return True
 
     # -- power-up -----------------------------------------------------
-    def break_block(self, tile):
-        """Salauž bloku un piešķir punktus/zeltu. Atgriež True, ja bloks bija."""
+    def break_block(self, tile, direct=False):
+        """Salauž bloku un piešķir punktus/zeltu. `direct` = spēlētājs to izrakā pats
+        (tikai tad zelta drudzis dod papildu zeltu). Atgriež True, ja bloks bija."""
         kind = self.world.blocks.pop(tile, None)
+        self.damage.pop(tile, None)
         if kind is None:
             return False
+        self.events.append(("break", kind))
         _, _, value, gold = BLOCKS[kind]
         self.score += value
         self.gold += gold
-        if self.stacks("goldrush"):
-            self.gold += GOLDRUSH_GOLD           # zelta drudzis: zelts par katru bloku
+        if direct and self.stacks("goldrush"):
+            self.gold += GOLDRUSH_GOLD
         return True
+
+    def damage_block(self, tile, amount):
+        """Bojā bloku (sprādziens, 3x3); salūst, kad bojājums sasniedz 1."""
+        kind = self.world.blocks.get(tile)
+        if kind is None or kind in UNBREAKABLE:
+            return
+        self.damage[tile] = self.damage.get(tile, 0.0) + amount
+        if self.damage[tile] >= 1.0:
+            self.break_block(tile)
+
+    def pop_events(self):
+        """Atdod uzkrātos notikumus (skaņai) un iztukšo sarakstu."""
+        events, self.events = self.events, []
+        return events
 
     def stacks(self, key):
         return len(self.powerups[key])
@@ -202,7 +223,7 @@ class Game:
         if n:
             for dx in range(-n, n + 1):
                 for dy in range(-n, n + 1):
-                    self.break_block((cx + dx, cy + dy))
+                    self.damage_block((cx + dx, cy + dy), SPLASH_DAMAGE)
             self.effects.append({"kind": "area", "col": cx, "row": cy, "r": n, "ttl": EFFECT_TTL})
         n = self.stacks("blast")
         if n:
@@ -210,7 +231,7 @@ class Game:
             for dx in range(-r, r + 1):
                 for dy in range(-r, r + 1):
                     if dx * dx + dy * dy <= r * r + 1:
-                        self.break_block((cx + dx, cy + dy))
+                        self.damage_block((cx + dx, cy + dy), SPLASH_DAMAGE)
             self.effects.append({"kind": "blast", "col": cx, "row": cy, "r": r, "ttl": EFFECT_TTL})
 
     def roll_powerup_drop(self):
@@ -251,9 +272,26 @@ class Game:
         base = BLOCKS[self.world.blocks[tile]][1]
         return base * self.mine_mult()
 
+    def wall_slow_mult(self):
+        return max(WALL_SLOW_MIN_MULT, 1 - WALL_SLOW_PER_LEVEL * self.levels["slowwall"])
+
     def wall_speed(self):
-        """Sienas ātrums (px/s) aug ar nogājušo distanci."""
-        return min(WALL_SPEED_MAX, WALL_SPEED_START + WALL_SPEED_PER_TILE * self.distance)
+        """Sienas ātrums (px/s): aug ar distanci, veikala uzlabojums to palēnina."""
+        base = min(WALL_SPEED_MAX, WALL_SPEED_START + WALL_SPEED_PER_TILE * self.distance)
+        return base * self.wall_slow_mult()
+
+    def kinds_under(self, r, inset=0):
+        """Bloku veidi, ko pārklāj taisnstūris (ar iekšējo atkāpi `inset`)."""
+        kinds = set()
+        for c in range((r.left + inset) // TILE, (r.right - 1 - inset) // TILE + 1):
+            for row in range((r.top + inset) // TILE, (r.bottom - 1 - inset) // TILE + 1):
+                k = self.world.blocks.get((c, row))
+                if k is not None:
+                    kinds.add(k)
+        return kinds
+
+    def terrain_slow(self):
+        return BRAMBLE_SLOW if BRAMBLES in self.kinds_under(self.player) else 1.0
 
     def powerup_chance(self):
         return min(POWERUP_CHANCE_MAX, POWERUP_CHANCE + POWERUP_LUCK_BONUS * self.levels["luck"])

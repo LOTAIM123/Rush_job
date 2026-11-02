@@ -1,0 +1,288 @@
+"""Skaņa: mūzika un efekti (bloka salūšana, nāve).
+
+Ja mapē client/sounds/ ir faili, tiek lietoti tie (neobligāti):
+    break.wav   - skaņa, kad salūst jebkurš bloks
+    death.wav   - skaņa, kad spēlētājs mirst
+    music.ogg / music.mp3 / music.wav - fona mūzika (cikliski)
+Ja failu nav, skaņas tiek sintezētas kodā, tāpēc ārēji faili nav vajadzīgi.
+Ja nav audio ierīces, viss darbojas kā "klusais režīms" un spēle netraucēti iet tālāk.
+"""
+import array
+import math
+import os
+import random
+import threading
+import time
+
+import pygame
+
+MUSIC_VOLUME = 0.30
+SFX_VOLUME = 0.55
+MIN_GAP_MS = 45                 # minimālais starplaiks vienam skaņas veidam
+
+# bloka veids -> (toņa frekvence, ilgums s, trokšņa daļa, trokšņa filtrs)
+BREAK_SPECS = {
+    1: (110, 0.10, 0.55, 0.35),     # zeme: dobja
+    2: (190, 0.12, 0.60, 0.55),     # akmens: sausāka
+    3: (80, 0.18, 0.50, 0.25),      # slate: smaga
+    6: (0, 0.10, 1.00, 0.75),       # krūmi: čaukstoņa
+}
+
+BPM = 132
+# (basa tonis, akorda toņi) - Am F C G Am F G E
+CHORDS = [(45, [57, 60, 64, 69]), (41, [53, 57, 60, 65]), (48, [55, 60, 64, 67]),
+          (43, [55, 59, 62, 67]), (45, [57, 60, 64, 69]), (41, [53, 57, 60, 65]),
+          (43, [55, 59, 62, 67]), (40, [52, 56, 59, 64])]
+PATTERNS = ([0, 1, 2, 3, 2, 1, 2, 1], [3, 2, 1, 0, 1, 2, 3, 2])
+
+
+def hz(midi):
+    return 440.0 * 2 ** ((midi - 69) / 12)
+
+
+class Audio:
+    def __init__(self, base_dir):
+        self.ok = False
+        self.muted = False
+        self.want_music = False
+        self._music_playing = False
+        self._music_sound = None
+        self._music_file = None
+        self.sounds = {}
+        self._last = {}
+        self.rate, self.channels = 22050, 1
+        self.channel = None
+        try:
+            if not pygame.mixer.get_init():
+                pygame.mixer.init(22050, -16, 1, 512)
+            freq, size, chans = pygame.mixer.get_init()
+            if size != -16:
+                return                      # neatbalstīts formāts: klusais režīms
+            self.rate, self.channels = freq, chans
+            pygame.mixer.set_reserved(1)    # kanāls 0 - mūzikai
+            self.channel = pygame.mixer.Channel(0)
+            self.ok = True
+        except pygame.error:
+            return
+
+        self.dir = os.path.join(base_dir, "sounds")
+        self._load_effects()
+        for ext in ("ogg", "mp3", "wav"):
+            path = os.path.join(self.dir, f"music.{ext}")
+            if os.path.exists(path):
+                self._music_file = path
+                break
+        if self._music_file is None:
+            threading.Thread(target=self._build_music, daemon=True).start()
+
+    # ------------------------------------------------------------ publiskais
+    def play_music(self):
+        self.want_music = True
+
+    def fade_music(self, ms=700):
+        self.want_music = False
+        if self.ok and self._music_playing:
+            self._music_playing = False
+            if self._music_file:
+                pygame.mixer.music.fadeout(ms)
+            else:
+                self.channel.fadeout(ms)
+
+    def toggle_mute(self):
+        self.muted = not self.muted
+        self._apply_volume()
+
+    def update(self):
+        """Katru kadru: sāk mūziku, kad tā ir gatava."""
+        if not self.ok or not self.want_music or self._music_playing:
+            return
+        if self._music_file:
+            try:
+                pygame.mixer.music.load(self._music_file)
+                pygame.mixer.music.play(-1)
+            except pygame.error:
+                self._music_file = None
+                return
+        elif self._music_sound is not None:
+            self.channel.play(self._music_sound, loops=-1)
+        else:
+            return                          # vēl tiek sintezēta
+        self._music_playing = True
+        self._apply_volume()
+
+    def handle(self, events):
+        """Apstrādā spēles notikumus: ("break", bloka_veids), ("death", cēlonis)."""
+        if not self.ok:
+            return
+        for name, arg in events:
+            if name == "break":
+                self._play(("break", arg))
+            elif name == "death":
+                self.fade_music()
+                self._play(("death", arg), gap=0)
+
+    # ------------------------------------------------------------ iekšējais
+    def _apply_volume(self):
+        if not self.ok:
+            return
+        vol = 0.0 if self.muted else MUSIC_VOLUME
+        self.channel.set_volume(vol)
+        pygame.mixer.music.set_volume(vol)
+
+    def _play(self, key, gap=MIN_GAP_MS):
+        variants = self.sounds.get(key)
+        if self.muted or not variants:
+            return
+        now = pygame.time.get_ticks()
+        if now - self._last.get(key, -10_000) < gap:
+            return
+        self._last[key] = now
+        random.choice(variants).play()
+
+    def _make_sound(self, samples, volume=SFX_VOLUME):
+        data = array.array("h")
+        for x in samples:
+            v = int(max(-1.0, min(1.0, x)) * 32767)
+            data.append(v)
+            if self.channels == 2:
+                data.append(v)
+        snd = pygame.mixer.Sound(buffer=data.tobytes())
+        snd.set_volume(volume)
+        return snd
+
+    def _load_file(self, name):
+        path = os.path.join(self.dir, name)
+        if os.path.exists(path):
+            try:
+                snd = pygame.mixer.Sound(path)
+                snd.set_volume(SFX_VOLUME)
+                return snd
+            except pygame.error:
+                pass
+        return None
+
+    def _load_effects(self):
+        rng = random.Random(7)
+        file_break = self._load_file("break.wav")
+        for kind in (1, 2, 3, 4, 6):
+            if file_break:
+                self.sounds[("break", kind)] = [file_break]
+            else:
+                self.sounds[("break", kind)] = [
+                    self._make_sound(self._synth_break(kind, rng)) for _ in range(3)]
+        file_death = self._load_file("death.wav")
+        for cause in ("wall", "lava"):
+            self.sounds[("death", cause)] = [
+                file_death or self._make_sound(self._synth_death(cause, rng))]
+
+    # ------------------------------------------------------------ sintēze
+    def _noise(self, n, rng, a):
+        """Zemfrekvenču filtrēts troksnis (a mazs = dobjāks), normalizēts ~±1."""
+        scale = 1.0 / (math.sqrt(a / (2 - a)) * 0.577)
+        y, out = 0.0, []
+        for _ in range(n):
+            y += a * (rng.uniform(-1, 1) - y)
+            out.append(y * scale)
+        return out
+
+    @staticmethod
+    def _normalize(samples, peak=0.9):
+        top = max(abs(x) for x in samples) or 1.0
+        return [x * peak / top for x in samples]
+
+    def _synth_break(self, kind, rng):
+        r = self.rate
+        jitter = rng.uniform(0.9, 1.1)
+        if kind == 4:                                   # zelts: zvaniņš
+            n = int(0.28 * r)
+            tick = self._noise(600, rng, 0.8)
+            out = []
+            for i in range(n):
+                t = i / r
+                env = (1 - i / n) ** 1.6
+                s = env * (0.55 * math.sin(2 * math.pi * 880 * jitter * t)
+                           + 0.35 * math.sin(2 * math.pi * 1320 * jitter * t)
+                           + 0.15 * math.sin(2 * math.pi * 1760 * jitter * t))
+                if i < 600:
+                    s += 0.3 * tick[i] * (1 - i / 600)
+                out.append(s)
+            return self._normalize(out)
+        freq, dur, namt, a = BREAK_SPECS[kind]
+        n = int(dur * r)
+        noise = self._noise(n, rng, a)
+        out = []
+        for i in range(n):
+            env = (1 - i / n) ** 2
+            tone = math.sin(2 * math.pi * freq * jitter * (i / r) * (1 - 0.35 * i / n)) if freq else 0.0
+            out.append(env * (tone * (1 - namt) + noise[i] * namt * 0.8))
+        return self._normalize(out)
+
+    def _synth_death(self, cause, rng):
+        r = self.rate
+        lava = cause == "lava"
+        n = int((1.2 if lava else 1.0) * r)
+        f0, f1 = (520, 40) if lava else (330, 60)
+        rumble = self._noise(n, rng, 0.05)
+        hiss = self._noise(n, rng, 0.8) if lava else None
+        phase, out = 0.0, []
+        for i in range(n):
+            p = i / n
+            phase += 2 * math.pi * (f0 * (1 - p) + f1 * p) / r
+            sq = 1.0 if math.sin(phase) > 0 else -1.0
+            env = (1 - p) ** 1.2
+            s = env * (0.30 * sq + 0.25 * math.sin(phase * 0.5) + 0.35 * rumble[i])
+            if hiss:
+                s += 0.25 * hiss[i] * (1 - p) ** 0.8
+            out.append(s)
+        peak = max(abs(x) for x in out) or 1.0
+        return [x * 0.9 / peak for x in out]
+
+    def _build_music(self):
+        """Sintezē ~14 s ciklisku čipmūzikas melodiju (fonā, lai nebremzē startu)."""
+        try:
+            r = self.rate
+            beat = 60.0 / BPM
+            eighth = int(beat / 2 * r)
+            bar = eighth * 8
+            buf = [0.0] * (bar * len(CHORDS))
+            rng = random.Random(11)
+
+            def add(start, samples):
+                for k, v in enumerate(samples):
+                    buf[start + k] += v
+
+            for b, (bass, tones) in enumerate(CHORDS):
+                base = b * bar
+                pattern = PATTERNS[b % 2]
+                for e in range(8):                      # melodija: astotdaļu arpedžo
+                    f = hz(tones[pattern[e]] + 12)
+                    n = int(eighth * 0.95)
+                    note = []
+                    for i in range(n):
+                        sq = 1.0 if (i * f / r) % 1.0 < 0.5 else -1.0
+                        env = min(1.0, i / 60) * (1 - 0.7 * i / n)
+                        note.append(0.15 * sq * env)
+                    add(base + e * eighth, note)
+                for q in range(4):                      # bass: sakne / oktāva
+                    f = hz(bass + (12 if q % 2 else 0))
+                    n = eighth * 2
+                    note = []
+                    for i in range(n):
+                        tri = 2 / math.pi * math.asin(math.sin(2 * math.pi * f * i / r))
+                        note.append(0.30 * tri * (1 - 0.5 * i / n))
+                    add(base + q * 2 * eighth, note)
+                    if q % 2 == 0:                      # bungas
+                        kn = int(0.12 * r)
+                        add(base + q * 2 * eighth,
+                            [0.35 * math.sin(2 * math.pi * (120 - 70 * i / kn) * i / r) * (1 - i / kn) ** 2
+                             for i in range(kn)])
+                for e in (1, 3, 5, 7):                  # čīkstošs "hi-hat"
+                    hn = int(0.03 * r)
+                    nz = [rng.uniform(-1, 1) for _ in range(hn + 1)]
+                    add(base + e * eighth,
+                        [0.07 * (nz[i] - nz[i + 1]) * (1 - i / hn) for i in range(hn)])
+                time.sleep(0.002)                       # atdod laiku galvenajam pavedienam
+            peak = max(abs(x) for x in buf) or 1.0
+            self._music_sound = self._make_sound([x * 0.85 / peak for x in buf], volume=1.0)
+        except Exception:
+            self._music_sound = None

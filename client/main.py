@@ -6,10 +6,11 @@ from pygame.locals import *
 from game import (BLOCKS, COLS, EFFECT_TTL, HEIGHT, PLAYER_SIZE, POWERUPS,
                   ROWS, TILE, UPGRADES, WIDTH, Game, Input, shop_col_near)
 
-from . import api_client
+from . import api_client, audio
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-TEXTURE_FILES = {1: "dirt.png", 2: "stone.png", 3: "hard.png", 4: "gold.png"}
+TEXTURE_FILES = {1: "dirt.png", 2: "stone.png", 3: "hard.png", 4: "gold.png",
+                 5: "lava.png", 6: "brambles.png"}
 PLAYER_TEXTURE_FILE = "player.png"
 EMPTY = (62, 56, 66)
 MENU_OY = (HEIGHT - 540) // 2     # izvēlne ir veidota 540 px augstumam: centrējam
@@ -108,15 +109,20 @@ def draw_game(screen, game, textures, cam_x, font, small):
                 pygame.draw.rect(screen, tuple(max(0, c - 35) for c in color), r, 1)
                 if kind == 4:
                     pygame.draw.circle(screen, (255, 235, 130), r.center, 5)
+                elif kind == 5:      # lava: spilgti plankumi
+                    for ox, oy in ((0.3, 0.3), (0.7, 0.55), (0.4, 0.8)):
+                        pygame.draw.circle(screen, (255, 200, 60), (r.x + r.w * ox, r.y + r.h * oy), 4)
+                elif kind == 6:      # krūmi: ērkšķi
+                    pygame.draw.line(screen, (150, 210, 110), r.topleft, r.bottomright, 2)
+                    pygame.draw.line(screen, (150, 210, 110), r.topright, r.bottomleft, 2)
 
-    if game.mine_target in game.world.blocks:
-        hardness = game.mine_time(game.mine_target)
-        frac = 1.0 if hardness <= 0 else min(1.0, game.mine_progress / hardness)
-        c, r = game.mine_target
+    for (c, r), dmg in game.damage.items():       # plaisas uz sabojātajiem blokiem
+        if dmg <= 0 or not first - 1 <= c <= first + COLS + 1:
+            continue
         rect = pygame.Rect(c * TILE - cam_x, r * TILE, TILE, TILE)
-        for i in range(int(frac * 5) + 1):
-            y = rect.top + 5 + i * 5
-            pygame.draw.line(screen, (20, 20, 20), (rect.left + 3, y), (rect.right - 3, y + 3), 2)
+        for i in range(int(min(dmg, 0.99) * 5) + 1):
+            y = rect.top + 6 + i * 7
+            pygame.draw.line(screen, (20, 20, 20), (rect.left + 4, y), (rect.right - 4, y + 4), 2)
 
     pl = game.player
     p = pygame.Rect(pl.x - cam_x, pl.y, pl.w, pl.h)
@@ -164,7 +170,8 @@ def draw_game(screen, game, textures, cam_x, font, small):
         shade = pygame.Surface((WIDTH, HEIGHT), SRCALPHA)
         shade.fill((0, 0, 0, 170))
         screen.blit(shade, (0, 0))
-        draw_centered(screen, font.render("SADRUMSTS!", True, (255, 90, 90)), HEIGHT // 2 - 50)
+        title = "SADEGA LAVĀ!" if game.death_cause == "lava" else "SADRUMSTS!"
+        draw_centered(screen, font.render(title, True, (255, 90, 90)), HEIGHT // 2 - 50)
         draw_centered(screen, font.render(f"Rezultāts: {game.score}", True, (255, 255, 255)), HEIGHT // 2)
         draw_centered(screen, small.render("Enter: spēlēt vēlreiz    Esc: izvēlne", True, (220, 220, 220)), HEIGHT // 2 + 50)
 
@@ -224,14 +231,17 @@ def draw_menu(screen, fonts, buttons, name, board):
         line = f"{i + 1}. {row['name']} - {row['score']}"
         draw_centered(screen, small.render(line, True, (220, 220, 220)), 412 + MENU_OY + i * 22)
     draw_centered(screen, small.render(
-        "Kustība: bultiņas/WASD   Racšana: Space vai pele   E: veikals", True, (150, 150, 160)), HEIGHT - 26)
+        "Kustība: bultiņas/WASD   Racšana: Space vai pele   E: veikals   M/F2: skaņa", True, (150, 150, 160)), HEIGHT - 26)
 
 
 def main():
+    pygame.mixer.pre_init(22050, -16, 1, 512)
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     pygame.display.set_caption("Rush Job")
     clock = pygame.time.Clock()
+    sfx = audio.Audio(BASE_DIR)
+    sfx.play_music()
     fonts = (pygame.font.Font(None, 100), pygame.font.Font(None, 44), pygame.font.Font(None, 26))
     font, small = fonts[1], fonts[2]
 
@@ -255,12 +265,17 @@ def main():
         game.reset()
         submitted = False
         state = "playing"
+        sfx.play_music()
 
     while True:
         dt = min(clock.tick(60) / 1000.0, 0.05)
+        sfx.update()
         for event in pygame.event.get():
             if event.type == QUIT:
                 return
+            if event.type == KEYDOWN and (event.key == K_F2 or (state != "menu" and event.key == K_m)):
+                sfx.toggle_mute()          # M (spēlē) vai F2 (jebkur): skaņa ieslēgta/izslēgta
+                continue
             if state == "menu":
                 if event.type == MOUSEBUTTONDOWN and event.button == 1:
                     if start_btn.collidepoint(event.pos):
@@ -284,6 +299,7 @@ def main():
                 if event.key == K_ESCAPE:
                     state = "menu"
                     board.refresh()
+                    sfx.play_music()
                 elif event.key == K_RETURN and not game.alive:
                     start()
                 elif event.key == K_e and game.alive and game.shop_here() is not None:
@@ -294,6 +310,7 @@ def main():
         else:
             if state == "playing":
                 game.update(dt, read_input(game, camera_x(game)))
+                sfx.handle(game.pop_events())
                 if not game.alive and not submitted:
                     submitted = True
                     api_client.submit_score(name.strip() or "Anonīms", game.score, game.time)
