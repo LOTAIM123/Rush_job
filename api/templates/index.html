@@ -3,25 +3,129 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Rush Job — Labākie rezultāti</title>
+  <title>Rush Job — Rezultāti un noteikumi</title>
   <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
 </head>
 <body>
+  <header class="top">
+    <a class="brand" href="#">Rush Job</a>
+    <nav>
+      <a class="btn" href="#rezultati">Rezultāti</a>
+      <a class="btn" href="#noteikumi">Noteikumi</a>
+      <a class="btn btn-accent" href="/docs" target="_blank" rel="noopener">API dokumentācija</a>
+    </nav>
+  </header>
+
   <main>
-    <h1>Rush Job</h1>
-    <p class="sub">Labākie rezultāti</p>
-    {% if scores %}
-    <table>
-      <thead><tr><th>#</th><th>Vārds</th><th>Punkti</th><th>Laiks</th></tr></thead>
-      <tbody>
-      {% for s in scores %}
-        <tr><td>{{ loop.index }}</td><td>{{ s.name }}</td><td>{{ s.score }}</td><td>{{ "%.1f"|format(s.seconds) }} s</td></tr>
-      {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <p class="empty">Vēl nav neviena rezultāta. Esi pirmais!</p>
-    {% endif %}
+    <section id="rezultati">
+      <h1>Labākie rezultāti</h1>
+      {% if scores %}
+      <table>
+        <thead><tr><th>#</th><th>Vārds</th><th>Punkti</th><th>Laiks</th></tr></thead>
+        <tbody>
+        {% for s in scores %}
+          <tr><td>{{ loop.index }}</td><td>{{ s.name }}</td><td>{{ s.score }}</td><td>{{ "%.1f"|format(s.seconds) }} s</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="empty">Vēl nav neviena rezultāta. Esi pirmais!</p>
+      {% endif %}
+    </section>
+
+    <section id="noteikumi">
+      <h1>Noteikumi</h1>
+
+      <div class="card">
+        <h2>Mērķis</h2>
+        <p>Izrok ceļu pa labi cauri bezgalīgam akmenim, kamēr no kreisās puses tuvojas siena. Ja siena tevi panāk
+          vai tu pieskaries lavai, spēle beidzas. Sakrāj pēc iespējas vairāk punktu un zelta, kamēr vēl esi dzīvs.</p>
+      </div>
+
+      <div class="card">
+        <h2>Vadība</h2>
+        <table class="keys">
+          <tr><td><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> vai <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></td><td>Kustība ({{ rules.player_speed }} rūtis sekundē)</td></tr>
+          <tr><td><kbd>Space</kbd></td><td>Rakt bloku, uz kuru skaties</td></tr>
+          <tr><td>Peles kreisā poga</td><td>Rakt bloku, uz kuru norādi (tuvumā)</td></tr>
+          <tr><td><kbd>E</kbd></td><td>Atvērt veikalu (kad esi veikala telpā) un aizvērt</td></tr>
+          <tr><td><kbd>1</kbd>–<kbd>4</kbd></td><td>Pirkt uzlabojumu veikalā</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Atpakaļ uz izvēlni</td></tr>
+          <tr><td><kbd>Enter</kbd></td><td>Sākt jaunu spēli</td></tr>
+          <tr><td><kbd>M</kbd> / <kbd>F2</kbd></td><td>Ieslēgt vai izslēgt skaņu</td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h2>Bloki</h2>
+        <div class="scroll">
+        <table>
+          <thead><tr><th>Bloks</th><th>Racšanas laiks</th><th>Punkti</th><th>Zelts</th><th>Piezīme</th></tr></thead>
+          <tbody>
+          {% for b in rules.blocks %}
+            <tr><td>{{ b.name }}</td><td>{{ b.time }}</td><td>{{ b.points }}</td><td>{{ b.gold }}</td><td class="note">{{ b.note }}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        </div>
+        <p>Pasaule mainās līdz ar distanci: sākumā gandrīz tikai zeme, ap {{ rules.tier_stone }}. metru galvenokārt akmens,
+          no {{ rules.tier_slate }}. metra gandrīz tikai slate. Lava parādās no {{ rules.lava_min }}. metra, krūmi no {{ rules.bramble_min }}. metra.</p>
+      </div>
+
+      <div class="card">
+        <h2>Siena un distance</h2>
+        <ul>
+          <li>Distance tiek mērīta metros (1 rūts = 1 m) no starta punkta; skaitās tālākais sasniegtais punkts.</li>
+          <li>Siena sāk ar {{ rules.wall_start }} rūtīm sekundē un kļūst par {{ rules.wall_per_100 }} rūtīm/s ātrāka ik pēc 100 m,
+            līdz maksimumam {{ rules.wall_max }} rūtis/s. Laiks sienas ātrumu neietekmē, tikai distance.</li>
+          <li>Veikalā iegādāts uzlabojums sienu var palēnināt.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2>Power-up</h2>
+        <p>Katrs tieši izrakts bloks ar {{ rules.powerup_chance }} varbūtību (palielinās ar uzlabojumu «Veiksme») dod nejauši izvēlētu power-up.
+          Tie darbojas {{ rules.powerup_duration }} s. Power-up var izkrist tikai no bloka, ko izraki pats, nevis no tiem, ko izposta sprādziens.</p>
+        <div class="pu-list">
+          {% for p in rules.powerups %}
+          <div class="pu" style="--c: {{ p.color }}">
+            <strong>{{ p.name }}</strong>
+            <span>{{ p.text }}</span>
+            <small>Sakrājas: {{ p.how }}.</small>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Veikals</h2>
+        <p>Ik pēc {{ rules.shop_every }} m ir veikals: tukša telpa ar letes. Ieej tajā, nospied <kbd>E</kbd> un par zeltu pērc uzlabojumus (spēle uz brīdi apstājas).</p>
+        <div class="scroll">
+        <table>
+          <thead><tr><th>Uzlabojums</th><th>Efekts</th><th>Cena</th><th>Maksimums</th></tr></thead>
+          <tbody>
+          {% for u in rules.upgrades %}
+            <tr><td>{{ u.name }}</td><td class="note">{{ u.text }}</td><td>{{ u.cost }}</td><td>{{ u.max }}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Rezultāts</h2>
+        <p>Punkti tiek skaitīti par katru salauztu bloku (arī tos, ko salauž sprādziens vai 3×3). Pēc nāves rezultāts tiek nosūtīts uz serveri un parādās šajā tabulā.</p>
+      </div>
+    </section>
+
+    <section id="api" class="card docs-card">
+      <div>
+        <h2>API dokumentācija</h2>
+        <p>Servera pieejamie pieprasījumi (rezultātu saraksts un nosūtīšana), ko lieto spēle.</p>
+        <code>{{ docs_url }}</code>
+      </div>
+      <a class="btn btn-accent btn-big" href="/docs" target="_blank" rel="noopener">Atvērt /docs</a>
+    </section>
   </main>
 </body>
 </html>

@@ -123,10 +123,11 @@ class Audio:
         self._apply_volume()
 
     def handle(self, events):
-        """Apstrādā spēles notikumus: ("break", bloka_veids), ("death", cēlonis)."""
+        """Apstrādā spēles notikumus: ("break", bloka_veids, rūts), ("death", cēlonis)."""
         if not self.ok:
             return
-        for name, arg in events:
+        for ev in events:
+            name, arg = ev[0], ev[1]
             if name == "break":
                 self._play(("break", arg))
             elif name == "death":

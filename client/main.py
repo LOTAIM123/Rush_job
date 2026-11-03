@@ -7,9 +7,10 @@ from game import (BLOCKS, COLS, EFFECT_TTL, HEIGHT, PLAYER_SIZE, POWERUPS,
                   ROWS, TILE, UPGRADES, WIDTH, Game, Input, shop_col_near)
 
 from . import api_client, audio
+from .particles import Particles
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-TEXTURE_FILES = {1: "dirt.png", 2: "stone.png", 3: "hard.png", 4: "gold.png",
+TEXTURE_FILES = {1: "dirt.png", 2: "stone.png", 3: "slate.png", 4: "gold.png",
                  5: "lava.png", 6: "brambles.png"}
 PLAYER_TEXTURE_FILE = "player.png"
 EMPTY = (62, 56, 66)
@@ -88,7 +89,7 @@ def draw_effects(screen, game, cam_x):
         screen.blit(surf, surf.get_rect(center=centre))
 
 
-def draw_game(screen, game, textures, cam_x, font, small):
+def draw_game(screen, game, textures, cam_x, font, small, particles=None):
     screen.fill(EMPTY)
     first = int(cam_x // TILE)
     for col in range(first, first + COLS + 2):
@@ -138,6 +139,8 @@ def draw_game(screen, game, textures, cam_x, font, small):
         pygame.draw.circle(screen, (255, 255, 255), (p.centerx + fx * 6, p.centery + fy * 6), 3)
 
     draw_effects(screen, game, cam_x)
+    if particles:
+        particles.draw(screen, cam_x)
 
     wx = int(game.wall_x - cam_x)
     if wx > 0:
@@ -252,6 +255,7 @@ def main():
     buttons = [(start_btn, "Sākt"), (quit_btn, "Iziet")]
 
     textures = load_textures()
+    particles = Particles(textures)
     game = Game()
     board = api_client.Leaderboard()
     board.refresh()
@@ -263,6 +267,7 @@ def main():
     def start():
         nonlocal state, submitted
         game.reset()
+        particles.clear()
         submitted = False
         state = "playing"
         sfx.play_music()
@@ -310,11 +315,14 @@ def main():
         else:
             if state == "playing":
                 game.update(dt, read_input(game, camera_x(game)))
-                sfx.handle(game.pop_events())
+                events = game.pop_events()
+                sfx.handle(events)
+                particles.handle(events)
+                particles.update(dt)
                 if not game.alive and not submitted:
                     submitted = True
                     api_client.submit_score(name.strip() or "Anonīms", game.score, game.time)
-            draw_game(screen, game, textures, camera_x(game), font, small)
+            draw_game(screen, game, textures, camera_x(game), font, small, particles)
             if state == "shop":
                 draw_shop(screen, game, font, small)
         pygame.display.flip()

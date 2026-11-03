@@ -62,7 +62,7 @@ class Game:
         self.damage = {}       # bojājums blokiem: (col, row) -> 0..1 (1 = salūst)
         self.alive = True
         self.death_cause = None    # "wall" vai "lava"
-        self.events = []           # notikumi skaņai: ("break", veids), ("death", cēlonis)
+        self.events = []           # notikumi: ("break", veids, (col, row)), ("death", cēlonis)
         self.gold = 0
         self.distance = 0
         self.levels = {key: 0 for key in UPGRADES}
@@ -191,7 +191,7 @@ class Game:
         self.damage.pop(tile, None)
         if kind is None:
             return False
-        self.events.append(("break", kind))
+        self.events.append(("break", kind, tile))
         _, _, value, gold = BLOCKS[kind]
         self.score += value
         self.gold += gold
