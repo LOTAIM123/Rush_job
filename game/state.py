@@ -1,17 +1,20 @@
-"""Spēles loģika. Nezina neko par pygame: ievade tiek padota kā Input."""
+"""Game logic. It knows nothing about pygame: input is passed in as an Input object."""
+import math
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
-from .constants import (BLAST_BASE_RADIUS, BLOCKS, BOOT_BONUS, BRAMBLE_SLOW,
-                        BRAMBLES, COLS, EFFECT_TTL, GOLDRUSH_GOLD, LAVA,
-                        MESSAGE_TTL, PICK_FACTOR, PLAYER_SIZE, PLAYER_SPEED,
-                        POWERUP_CHANCE, POWERUP_CHANCE_MAX, POWERUP_DURATION,
+from .constants import (BLAST_BASE_RADIUS, BLOCKS, BOMB, BOMB_BLAST_RADIUS,
+                        BOOT_BONUS, BRAMBLE_SLOW, BRAMBLES, COLS, EFFECT_TTL,
+                        GOLDRUSH_GOLD, LAVA, MESSAGE_TTL, NON_SOLID,
+                        PICK_FACTOR, PLAYER_SIZE, PLAYER_SPEED, POWERUP_CHANCE,
+                        POWERUP_CHANCE_MAX, POWERUP_DURATION,
                         POWERUP_LUCK_BONUS, POWERUP_MAX_STACKS,
                         POWERUP_TIME_CAP, POWERUPS, REACH, ROWS, S,
-                        SPEED_PU_BONUS, SPLASH_DAMAGE, START_COL, TILE,
-                        UNBREAKABLE, UPGRADES, WALL_SLOW_MIN_MULT,
-                        WALL_SLOW_PER_LEVEL, WALL_SPEED_MAX,
-                        WALL_SPEED_PER_TILE, WALL_SPEED_START, WALL_START_X)
+                        SHOP_PRICE_GROWTH_PER_100, SPEED_PU_BONUS,
+                        SPLASH_DAMAGE, SPLASH_IMMUNE, START_COL, TILE,
+                        UNBREAKABLE, UPGRADES, WALL_MAX_RATIO,
+                        WALL_RATIO_PER_TILE, WALL_SLOW_MIN_MULT,
+                        WALL_SLOW_PER_LEVEL, WALL_START_RATIO, WALL_START_X)
 from .world import World, shop_col_near
 
 
@@ -40,8 +43,8 @@ class Rect:
 class Input:
     move_x: int = 0                       # -1, 0, 1
     move_y: int = 0
-    mine_facing: bool = False             # taustiņš: racī bloku, uz kuru skatās
-    mine_tile: Optional[Tuple[int, int]] = None   # pele: rūts (col, row)
+    mine_facing: bool = False             # key held: mine the block the player is facing
+    mine_tile: Optional[Tuple[int, int]] = None   # mouse: tile (col, row) under the cursor
 
 
 class Game:
@@ -59,18 +62,18 @@ class Game:
         self.wall_x = float(WALL_START_X)
         self.time = 0.0
         self.score = 0
-        self.damage = {}       # bojājums blokiem: (col, row) -> 0..1 (1 = salūst)
+        self.damage = {}       # damage to blocks: (col, row) -> 0..1 (1 = breaks)
         self.alive = True
-        self.death_cause = None    # "wall" vai "lava"
-        self.events = []           # notikumi: ("break", veids, (col, row)), ("death", cēlonis)
+        self.death_cause = None    # "wall", "lava" or "bomb"
+        self.events = []           # for sound/particles: ("break", kind, (col, row)), ("explode", (col, row)), ("death", cause)
         self.gold = 0
         self.distance = 0
         self.levels = {key: 0 for key in UPGRADES}
-        self.powerups = {key: [] for key in POWERUPS}   # atlikušie laiki katrai kaudzītei
-        self.effects = []      # vizuālie efekti: {"kind", "col", "row", "r", "ttl"}
-        self.messages = []     # paziņojumi: [teksts, ttl]
+        self.powerups = {key: [] for key in POWERUPS}   # remaining seconds for every stack
+        self.effects = []      # visual effects: {"kind", "col", "row", "r", "ttl", "max"}
+        self.messages = []     # on-screen messages: [text, ttl]
 
-    # -- kustība ------------------------------------------------------
+    # -- movement -----------------------------------------------------
     def collides(self, r):
         for c in range(r.left // TILE, (r.right - 1) // TILE + 1):
             for row in range(r.top // TILE, (r.bottom - 1) // TILE + 1):
@@ -101,12 +104,35 @@ class Game:
         self.move_axis(round(inp.move_x * step), 0)
         self.move_axis(0, round(inp.move_y * step))
 
-    # -- racšana ------------------------------------------------------
+    # -- mining -------------------------------------------------------
     def facing_tile(self):
+        """The tile to mine with the keyboard.
+
+        The player is smaller than a tile and is rarely centred on one, so the block in front
+        may be split across two tiles. All tiles touched by the player's front edge are
+        considered: solid blocks first, then the one overlapping the player the most.
+        """
         fx, fy = self.facing
-        px = self.player.centerx + fx * (PLAYER_SIZE // 2 + round(4 * S))
-        py = self.player.centery + fy * (PLAYER_SIZE // 2 + round(4 * S))
-        return (px // TILE, py // TILE)
+        p = self.player
+        probe = PLAYER_SIZE // 2 + round(4 * S)
+        px, py = p.centerx + fx * probe, p.centery + fy * probe
+        if fx:      # facing left/right: one column, every row the player overlaps
+            col = px // TILE
+            candidates = [((col, r), min(p.bottom, (r + 1) * TILE) - max(p.top, r * TILE))
+                          for r in range(p.top // TILE, (p.bottom - 1) // TILE + 1)]
+        else:       # facing up/down: one row, every column the player overlaps
+            row = py // TILE
+            candidates = [((c, row), min(p.right, (c + 1) * TILE) - max(p.left, c * TILE))
+                          for c in range(p.left // TILE, (p.right - 1) // TILE + 1)]
+        best, best_key = None, None
+        for tile, overlap in candidates:
+            kind = self.world.blocks.get(tile)
+            if kind is None or kind in UNBREAKABLE:
+                continue
+            key = (kind not in NON_SOLID, overlap)
+            if best_key is None or key > best_key:
+                best, best_key = tile, key
+        return best if best is not None else (px // TILE, py // TILE)
 
     def in_reach(self, tile):
         cx, cy = tile[0] * TILE + TILE / 2, tile[1] * TILE + TILE / 2
@@ -127,35 +153,40 @@ class Game:
         self.damage[target] = self.damage.get(target, 0.0) + (dt / t if t > 0 else 1.0)
         if self.damage[target] >= 1.0:
             self.break_block(target, direct=True)
-            self.apply_powerups(target)
-            self.roll_powerup_drop()
+            if kind == BOMB:
+                self.detonate(target)            # bombs ignore every mining power-up
+            else:
+                self.apply_powerups(target)
+                self.roll_powerup_drop()
 
-    # -- galvenais atjauninājums --------------------------------------
+    # -- main update --------------------------------------------------
     def update(self, dt, inp):
         if not self.alive:
             return
         self.time += dt
-        if len(self.events) > 200:           # drošība, ja neviens tos neizlasa
+        if len(self.events) > 200:           # safety net if nobody reads them
             self.events = self.events[-50:]
         self.tick_effects(dt)
         self.update_player(dt, inp)
         self.distance = max(self.distance, self.player.centerx // TILE - START_COL)
         self.update_mining(dt, inp)
 
-        speed = self.wall_speed()
-        self.wall_x += speed * dt
-        if self.player.left < self.wall_x:
-            self.alive, self.death_cause = False, "wall"
-            self.events.append(("death", "wall"))
-        elif LAVA in self.kinds_under(self.player, inset=round(4 * S)):
-            self.alive, self.death_cause = False, "lava"
-            self.events.append(("death", "lava"))
+        self.wall_x += self.wall_speed() * dt
+        if self.alive:
+            if self.player.left < self.wall_x:
+                self.kill("wall")
+            elif LAVA in self.kinds_under(self.player, inset=round(4 * S)):
+                self.kill("lava")
 
         self.world.ensure(self.player.centerx // TILE + COLS + 4)
         self.world.prune(int(self.wall_x // TILE) - 2)
         self.damage = {k: v for k, v in self.damage.items() if k in self.world.blocks}
 
-    # -- uzlabojumi un veikals ----------------------------------------
+    def kill(self, cause):
+        self.alive, self.death_cause = False, cause
+        self.events.append(("death", cause))
+
+    # -- upgrades and shop --------------------------------------------
     def mine_mult(self):
         return PICK_FACTOR ** self.levels["pick"]
 
@@ -163,19 +194,25 @@ class Game:
         return 1 + BOOT_BONUS * self.levels["boots"] + SPEED_PU_BONUS * self.stacks("speed")
 
     def shop_here(self):
-        """Veikala centra rūts, ja spēlētājs atrodas veikala telpā, citādi None."""
+        """Centre column of the shop the player is standing in, otherwise None."""
         return shop_col_near(self.player.centerx // TILE)
 
     def next_shop_distance(self):
         return (self.distance // 100 + 1) * 100
 
+    def price_multiplier(self):
+        """Every price rises with the distance travelled, whether or not it was ever bought."""
+        return 1 + SHOP_PRICE_GROWTH_PER_100 * self.distance / 100
+
     def upgrade_cost(self, key):
         _, base, step, max_level = UPGRADES[key]
         level = self.levels[key]
-        return None if level >= max_level else base + step * level
+        if level >= max_level:
+            return None
+        return math.ceil((base + step * level) * self.price_multiplier())
 
     def buy(self, key):
-        """Nopērk uzlabojumu, ja spēlētājs ir veikalā un pietiek zelta."""
+        """Buys an upgrade if the player is in a shop and has enough gold."""
         cost = self.upgrade_cost(key)
         if self.shop_here() is None or cost is None or self.gold < cost:
             return False
@@ -183,10 +220,10 @@ class Game:
         self.levels[key] += 1
         return True
 
-    # -- power-up -----------------------------------------------------
+    # -- blocks, power-ups, bombs ---------------------------------------
     def break_block(self, tile, direct=False):
-        """Salauž bloku un piešķir punktus/zeltu. `direct` = spēlētājs to izrakā pats
-        (tikai tad zelta drudzis dod papildu zeltu). Atgriež True, ja bloks bija."""
+        """Breaks a block and awards points/gold. `direct` = the player mined it
+        (only then Gold Rush gives bonus gold). Returns True if there was a block."""
         kind = self.world.blocks.pop(tile, None)
         self.damage.pop(tile, None)
         if kind is None:
@@ -200,16 +237,28 @@ class Game:
         return True
 
     def damage_block(self, tile, amount):
-        """Bojā bloku (sprādziens, 3x3); salūst, kad bojājums sasniedz 1."""
+        """Damages a block (explosion, 3x3); it breaks when damage reaches 1."""
         kind = self.world.blocks.get(tile)
-        if kind is None or kind in UNBREAKABLE:
+        if kind is None or kind in UNBREAKABLE or kind in SPLASH_IMMUNE:
             return
         self.damage[tile] = self.damage.get(tile, 0.0) + amount
         if self.damage[tile] >= 1.0:
             self.break_block(tile)
 
+    def detonate(self, tile):
+        """A bomb the player mined goes off: it kills the player unless a Shield is active."""
+        col, row = tile
+        self.events.append(("explode", tile))
+        ttl = EFFECT_TTL * 1.5
+        self.effects.append({"kind": "bomb", "col": col, "row": row, "r": BOMB_BLAST_RADIUS,
+                             "ttl": ttl, "max": ttl})
+        if self.stacks("shield"):
+            self.messages.append(["The shield absorbed the blast!", MESSAGE_TTL])
+        else:
+            self.kill("bomb")
+
     def pop_events(self):
-        """Atdod uzkrātos notikumus (skaņai) un iztukšo sarakstu."""
+        """Returns the accumulated events (for sound and particles) and clears the list."""
         events, self.events = self.events, []
         return events
 
@@ -217,14 +266,15 @@ class Game:
         return len(self.powerups[key])
 
     def apply_powerups(self, centre):
-        """Aktīvie power-up salauž blokus ap tikko izraktā bloka rūti."""
+        """Active power-ups damage the blocks around the block that was just mined."""
         cx, cy = centre
         n = self.stacks("area")
         if n:
             for dx in range(-n, n + 1):
                 for dy in range(-n, n + 1):
                     self.damage_block((cx + dx, cy + dy), SPLASH_DAMAGE)
-            self.effects.append({"kind": "area", "col": cx, "row": cy, "r": n, "ttl": EFFECT_TTL})
+            self.effects.append({"kind": "area", "col": cx, "row": cy, "r": n,
+                                 "ttl": EFFECT_TTL, "max": EFFECT_TTL})
         n = self.stacks("blast")
         if n:
             r = BLAST_BASE_RADIUS + n
@@ -232,24 +282,25 @@ class Game:
                 for dy in range(-r, r + 1):
                     if dx * dx + dy * dy <= r * r + 1:
                         self.damage_block((cx + dx, cy + dy), SPLASH_DAMAGE)
-            self.effects.append({"kind": "blast", "col": cx, "row": cy, "r": r, "ttl": EFFECT_TTL})
+            self.effects.append({"kind": "blast", "col": cx, "row": cy, "r": r,
+                                 "ttl": EFFECT_TTL, "max": EFFECT_TTL})
 
     def roll_powerup_drop(self):
-        """Tikai tieši izraktie bloki (ne sprādzienā izpostītie) var dot power-up."""
+        """Only blocks the player mined directly (not ones broken by explosions) can drop a power-up."""
         rng = self.world.rng
         if rng.random() < self.powerup_chance():
             self.add_powerup(rng.choice(list(POWERUPS)))
 
     def add_powerup(self, key):
         timers = self.powerups[key]
-        if POWERUPS[key][2] == "time":            # pagarina vienīgo taimeri
+        if POWERUPS[key][2] == "time":            # extends the single timer
             total = min(POWERUP_TIME_CAP, (timers[0] if timers else 0.0) + POWERUP_DURATION)
             self.powerups[key] = [total]
             self.messages.append([f"{POWERUPS[key][0]}! +{POWERUP_DURATION:.0f}s", MESSAGE_TTL])
             return
         if len(timers) >= POWERUP_MAX_STACKS:
             timers.sort()
-            timers[0] = POWERUP_DURATION          # pilns: atjauno īsāko
+            timers[0] = POWERUP_DURATION          # full: refresh the shortest one
         else:
             timers.append(POWERUP_DURATION)
         self.messages.append([f"{POWERUPS[key][0]}! x{len(timers)}", MESSAGE_TTL])
@@ -264,24 +315,32 @@ class Game:
             m[1] -= dt
         self.messages = [m for m in self.messages if m[1] > 0]
 
-    # -- sienas ātrums un veiksme -----------------------------
+    # -- mining time, wall speed, luck ----------------------------------
     def mine_time(self, tile):
-        """Sekundes, kas vajadzīgas, lai izrakt bloku šajā rūtī."""
-        if self.stacks("insta"):
-            return 0.0                           # acumirklīga racšana
-        base = BLOCKS[self.world.blocks[tile]][1]
-        return base * self.mine_mult()
+        """Seconds needed to mine the block on this tile."""
+        kind = self.world.blocks[tile]
+        if self.stacks("insta") and kind != BOMB:
+            return 0.0                           # Instant Mine (bombs are not affected)
+        return BLOCKS[kind][1] * self.mine_mult()
+
+    def top_speed(self):
+        """The player's top speed in px/s: base speed with permanent boots upgrades."""
+        return PLAYER_SPEED * (1 + BOOT_BONUS * self.levels["boots"])
+
+    def wall_ratio(self):
+        """Wall speed as a fraction of the player's top speed; grows with distance."""
+        return min(WALL_MAX_RATIO, WALL_START_RATIO + WALL_RATIO_PER_TILE * self.distance)
 
     def wall_slow_mult(self):
         return max(WALL_SLOW_MIN_MULT, 1 - WALL_SLOW_PER_LEVEL * self.levels["slowwall"])
 
     def wall_speed(self):
-        """Sienas ātrums (px/s): aug ar distanci, veikala uzlabojums to palēnina."""
-        base = min(WALL_SPEED_MAX, WALL_SPEED_START + WALL_SPEED_PER_TILE * self.distance)
-        return base * self.wall_slow_mult()
+        """Wall speed in px/s: scales with distance and with the player's top speed;
+        the Wall Brake upgrade slows it down."""
+        return self.top_speed() * self.wall_ratio() * self.wall_slow_mult()
 
     def kinds_under(self, r, inset=0):
-        """Bloku veidi, ko pārklāj taisnstūris (ar iekšējo atkāpi `inset`)."""
+        """Block kinds covered by a rectangle (shrunk by `inset` pixels)."""
         kinds = set()
         for c in range((r.left + inset) // TILE, (r.right - 1 - inset) // TILE + 1):
             for row in range((r.top + inset) // TILE, (r.bottom - 1 - inset) // TILE + 1):

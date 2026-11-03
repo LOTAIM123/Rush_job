@@ -1,15 +1,16 @@
 import random
 
-from .constants import (BLOCK_TIER_DIST, BRAMBLE_CHANCE, BRAMBLE_MIN_COL,
-                        BRAMBLE_SIZE, BRAMBLES, LAVA, LAVA_CHANCE_BASE,
-                        LAVA_CHANCE_MAX, LAVA_CHANCE_PER_TILE, LAVA_MIN_COL,
-                        LAVA_SIZE, NON_SOLID, ROWS, SAFE_COLS, SHOP_EVERY,
-                        SHOP_HALF, START_COL, VEIN_CHANCE, VEIN_SIZE_MAX,
-                        VEIN_SIZE_MIN)
+from .constants import (BLOCK_TIER_DIST, BOMB, BOMB_CHANCE_BASE,
+                        BOMB_CHANCE_MAX, BOMB_CHANCE_PER_TILE, BOMB_MIN_COL,
+                        BRAMBLE_CHANCE, BRAMBLE_MIN_COL, BRAMBLE_SIZE,
+                        BRAMBLES, LAVA, LAVA_CHANCE_BASE, LAVA_CHANCE_MAX,
+                        LAVA_CHANCE_PER_TILE, LAVA_MIN_COL, LAVA_SIZE,
+                        NON_SOLID, ROWS, SAFE_COLS, SHOP_EVERY, SHOP_HALF,
+                        START_COL, VEIN_CHANCE, VEIN_SIZE_MAX, VEIN_SIZE_MIN)
 
 
 def shop_col_near(col):
-    """Ja `col` ir veikala telpā, atgriež veikala centra rūti, citādi None."""
+    """If `col` is inside a shop room, return the shop's centre column, otherwise None."""
     n = round((col - START_COL) / SHOP_EVERY)
     if n >= 1:
         centre = START_COL + n * SHOP_EVERY
@@ -23,10 +24,10 @@ class World:
         self.rng = rng or random.Random()
         self.blocks = {}
         self.generated_to = -1
-        self.patch_tiles = {}           # nākamo kolonnu plankumi: (col, row) -> bloka veids
+        self.patch_tiles = {}           # patches reaching into later columns: (col, row) -> block kind
 
     def seed_patch(self, col, kind, size_min, size_max):
-        """Plankums (zelta dzīsla, lava, krūmi): saaugusi rūšu grupa, kas stiepjas pa labi."""
+        """A patch (gold vein, lava, brambles): a connected group of tiles growing to the right."""
         size = self.rng.randint(size_min, size_max)
         tiles = {(col, self.rng.randrange(ROWS))}
         for _ in range(size * 8):
@@ -43,6 +44,10 @@ class World:
         d = max(0, col - START_COL)
         return min(LAVA_CHANCE_MAX, LAVA_CHANCE_BASE + LAVA_CHANCE_PER_TILE * d)
 
+    def bomb_chance(self, col):
+        d = max(0, col - START_COL)
+        return min(BOMB_CHANCE_MAX, BOMB_CHANCE_BASE + BOMB_CHANCE_PER_TILE * d)
+
     def generate_column(self, col):
         shop = shop_col_near(col) is not None
         if not shop and col >= SAFE_COLS:
@@ -51,20 +56,25 @@ class World:
             if col >= BRAMBLE_MIN_COL and self.rng.random() < BRAMBLE_CHANCE:
                 self.seed_patch(col, BRAMBLES, *BRAMBLE_SIZE)
             if col >= LAVA_MIN_COL and self.rng.random() < self.lava_chance(col):
-                self.seed_patch(col, LAVA, *LAVA_SIZE)     # pēdējā: pārraksta citus
+                self.seed_patch(col, LAVA, *LAVA_SIZE)     # last: overwrites the others
         if not shop:
             for row in range(ROWS):
                 if col < SAFE_COLS:
                     if self.rng.random() < 0.08:
                         self.blocks[(col, row)] = 1
                     continue
-                kind = self.patch_tiles.get((col, row)) or self.pick_tier(col)
+                kind = self.patch_tiles.get((col, row))
+                if not kind:
+                    if col >= BOMB_MIN_COL and self.rng.random() < self.bomb_chance(col):
+                        kind = BOMB
+                    else:
+                        kind = self.pick_tier(col)
                 self.blocks[(col, row)] = kind
-        # veikala telpa paliek tukša; izlietotie plankumi vairs nav vajadzīgi
+        # the shop room stays empty; used-up patch tiles are no longer needed
         self.patch_tiles = {t: k for t, k in self.patch_tiles.items() if t[0] > col}
 
     def pick_tier(self, col):
-        """Zeme (1) sākumā, tad akmens (2), tālāk slate (3): vienmērīga pāreja."""
+        """Dirt (1) at the start, then stone (2), later slate (3), blended smoothly."""
         x = max(0, col - START_COL) / BLOCK_TIER_DIST
         w_dirt = max(0.0, 1 - x)
         w_stone = max(0.0, 1 - abs(x - 1))

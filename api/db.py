@@ -1,4 +1,4 @@
-"""SQLite glabātuve rezultātiem."""
+"""SQLite storage for scores."""
 import os
 import sqlite3
 from contextlib import closing

@@ -1,21 +1,27 @@
+"""pygame client: input, drawing and talking to the API.
+Run from the project root:  python -m client.main
+"""
+import math
 import os
 
 import pygame
 from pygame.locals import *
 
-from game import (BLOCKS, COLS, EFFECT_TTL, HEIGHT, PLAYER_SIZE, POWERUPS,
-                  ROWS, TILE, UPGRADES, WIDTH, Game, Input, shop_col_near)
+from game import (BLOCKS, BOMB, COLS, EFFECT_TTL, HEIGHT, PLAYER_SIZE, POWERUPS,
+                  ROWS, SHOP_PRICE_GROWTH_PER_100, TILE, UPGRADES, WIDTH, Game,
+                  Input, shop_col_near)
 
 from . import api_client, audio
 from .particles import Particles
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEXTURE_FILES = {1: "dirt.png", 2: "stone.png", 3: "slate.png", 4: "gold.png",
-                 5: "lava.png", 6: "brambles.png"}
+                 5: "lava.png", 6: "brambles.png", 7: "bomb.png"}
 PLAYER_TEXTURE_FILE = "player.png"
 EMPTY = (62, 56, 66)
-MENU_OY = (HEIGHT - 540) // 2     # izvēlne ir veidota 540 px augstumam: centrējam
+MENU_OY = (HEIGHT - 540) // 2     # the menu is laid out for 540 px height: centre it
 MAX_NAME = 12
+DEATH_TITLES = {"wall": "CRUSHED!", "lava": "BURNED IN LAVA!", "bomb": "BLOWN UP!"}
 
 
 def load_textures():
@@ -61,20 +67,34 @@ def draw_shop_floor(screen, col, cam_x):
 
 
 def draw_shop_stall(screen, col, cam_x, small):
-    # letes platums pārsniedz vienu rūti, tāpēc zīmējama PĒC visām grīdām
-    # (citādi nākamās kolonnas grīda pārklāj pusi letes)
+    # The counter is wider than one tile, so it must be drawn AFTER all the floors
+    # (otherwise the next column's floor covers half of it).
     if shop_col_near(col) == col:
         x = col * TILE - cam_x
         stall = pygame.Rect(x - TILE // 2, (ROWS // 2 - 1) * TILE, TILE * 2, TILE * 2)
         pygame.draw.rect(screen, (190, 120, 40), stall, border_radius=4)
         pygame.draw.rect(screen, (255, 220, 140), stall, 2, border_radius=4)
-        label = small.render("VEIKALS", True, (255, 255, 255))
+        label = small.render("SHOP", True, (255, 255, 255))
         screen.blit(label, label.get_rect(midbottom=(stall.centerx, stall.top - 4)))
+
+
+def draw_bomb(screen, r):
+    """Fallback bomb picture (used when textures/bomb.png is missing)."""
+    cx, cy = r.center
+    radius = int(TILE * 0.30)
+    pygame.draw.circle(screen, (15, 15, 18), (cx - 2, cy + 3), radius)
+    pygame.draw.circle(screen, (200, 45, 45), (cx - 2, cy + 3), radius, 2)
+    pygame.draw.circle(screen, (110, 110, 120), (cx - 8, cy - 3), 3)           # highlight
+    fuse_end = (cx + 8, cy - radius + 1)
+    pygame.draw.line(screen, (190, 140, 70), (cx + 3, cy - radius + 6), fuse_end, 3)
+    if (pygame.time.get_ticks() // 220) % 2:                                    # blinking spark
+        pygame.draw.circle(screen, (255, 200, 60), fuse_end, 4)
+        pygame.draw.circle(screen, (255, 90, 40), fuse_end, 2)
 
 
 def draw_effects(screen, game, cam_x):
     for e in game.effects:
-        frac = 1 - e["ttl"] / EFFECT_TTL            # 0 -> 1
+        frac = 1 - e["ttl"] / e.get("max", EFFECT_TTL)            # 0 -> 1
         alpha = max(0, int(220 * (1 - frac)))
         size = (2 * e["r"] + 1) * TILE
         centre = (e["col"] * TILE + TILE // 2 - cam_x, e["row"] * TILE + TILE // 2)
@@ -83,10 +103,31 @@ def draw_effects(screen, game, cam_x):
             rad = int(size / 2 * (0.35 + 0.65 * frac))
             pygame.draw.circle(surf, (255, 150, 40, alpha), (size // 2, size // 2), rad)
             pygame.draw.circle(surf, (255, 240, 160, alpha), (size // 2, size // 2), rad, 3)
+        elif e["kind"] == "bomb":
+            rad = int(size / 2 * (0.3 + 0.7 * frac))
+            pygame.draw.circle(surf, (255, 70, 30, alpha), (size // 2, size // 2), rad)
+            pygame.draw.circle(surf, (255, 225, 120, alpha), (size // 2, size // 2), max(1, rad // 2))
+            pygame.draw.circle(surf, (40, 40, 40, alpha), (size // 2, size // 2), rad, 4)
         else:
             pygame.draw.rect(surf, (120, 220, 255, alpha // 2), surf.get_rect())
             pygame.draw.rect(surf, (210, 245, 255, alpha), surf.get_rect(), 3)
         screen.blit(surf, surf.get_rect(center=centre))
+
+
+def draw_shield(screen, game, p):
+    """A pulsing bubble around the player while the Shield power-up is active."""
+    remaining = max(game.powerups["shield"], default=0)
+    if remaining <= 0:
+        return
+    if remaining < 2 and (pygame.time.get_ticks() // 150) % 2:     # blink when about to expire
+        return
+    pulse = 0.5 + 0.5 * math.sin(pygame.time.get_ticks() / 180)
+    radius = int(PLAYER_SIZE * (0.95 + 0.08 * pulse))
+    bubble = pygame.Surface((radius * 2 + 6, radius * 2 + 6), SRCALPHA)
+    c = (bubble.get_width() // 2, bubble.get_height() // 2)
+    pygame.draw.circle(bubble, (90, 180, 255, int(45 + 35 * pulse)), c, radius)
+    pygame.draw.circle(bubble, (170, 225, 255, int(150 + 80 * pulse)), c, radius, 3)
+    screen.blit(bubble, bubble.get_rect(center=p.center))
 
 
 def draw_game(screen, game, textures, cam_x, font, small, particles=None):
@@ -110,14 +151,16 @@ def draw_game(screen, game, textures, cam_x, font, small, particles=None):
                 pygame.draw.rect(screen, tuple(max(0, c - 35) for c in color), r, 1)
                 if kind == 4:
                     pygame.draw.circle(screen, (255, 235, 130), r.center, 5)
-                elif kind == 5:      # lava: spilgti plankumi
+                elif kind == 5:      # lava: bright blobs
                     for ox, oy in ((0.3, 0.3), (0.7, 0.55), (0.4, 0.8)):
                         pygame.draw.circle(screen, (255, 200, 60), (r.x + r.w * ox, r.y + r.h * oy), 4)
-                elif kind == 6:      # krūmi: ērkšķi
+                elif kind == 6:      # brambles: thorns
                     pygame.draw.line(screen, (150, 210, 110), r.topleft, r.bottomright, 2)
                     pygame.draw.line(screen, (150, 210, 110), r.topright, r.bottomleft, 2)
+                elif kind == BOMB:
+                    draw_bomb(screen, r)
 
-    for (c, r), dmg in game.damage.items():       # plaisas uz sabojātajiem blokiem
+    for (c, r), dmg in game.damage.items():       # cracks on damaged blocks
         if dmg <= 0 or not first - 1 <= c <= first + COLS + 1:
             continue
         rect = pygame.Rect(c * TILE - cam_x, r * TILE, TILE, TILE)
@@ -137,6 +180,7 @@ def draw_game(screen, game, textures, cam_x, font, small, particles=None):
         pygame.draw.rect(screen, (90, 170, 255), p, border_radius=4)
         pygame.draw.rect(screen, (30, 60, 110), p, 2, border_radius=4)
         pygame.draw.circle(screen, (255, 255, 255), (p.centerx + fx * 6, p.centery + fy * 6), 3)
+    draw_shield(screen, game, p)
 
     draw_effects(screen, game, cam_x)
     if particles:
@@ -148,13 +192,14 @@ def draw_game(screen, game, textures, cam_x, font, small, particles=None):
     for y in range(0, HEIGHT, 20):
         pygame.draw.polygon(screen, (200, 50, 50), [(wx, y), (wx, y + 20), (wx + 12, y + 10)])
 
-    screen.blit(font.render(f"Punkti: {game.score}", True, (255, 255, 255)), (WIDTH - 230, 10))
-    screen.blit(font.render(f"Zelts: {game.gold}", True, (255, 215, 80)), (WIDTH - 230, 40))
+    wall = game.wall_speed()
+    screen.blit(font.render(f"Score: {game.score}", True, (255, 255, 255)), (WIDTH - 230, 10))
+    screen.blit(font.render(f"Gold: {game.gold:g}", True, (255, 215, 80)), (WIDTH - 230, 40))
     screen.blit(small.render(f"Distance: {game.distance} m", True, (220, 220, 220)), (WIDTH - 230, 72))
-    screen.blit(small.render(f"Nākamais veikals: {game.next_shop_distance()} m", True, (170, 170, 180)), (WIDTH - 230, 94))
-    screen.blit(small.render(f"Laiks: {game.time:0.1f}s", True, (170, 170, 180)), (WIDTH - 230, 116))
-
-    screen.blit(small.render(f"Siena: {game.wall_speed():.0f} px/s", True, (230, 120, 120)), (WIDTH - 230, 138))
+    screen.blit(small.render(f"Next shop: {game.next_shop_distance()} m", True, (170, 170, 180)), (WIDTH - 230, 94))
+    screen.blit(small.render(f"Time: {game.time:0.1f}s", True, (170, 170, 180)), (WIDTH - 230, 116))
+    screen.blit(small.render(f"Wall: {wall:.0f} px/s ({wall / game.top_speed():.0%})",
+                             True, (230, 120, 120)), (WIDTH - 230, 138))
     y = 166
     for key, (pname, pcolor, mode) in POWERUPS.items():
         timers = game.powerups[key]
@@ -167,16 +212,16 @@ def draw_game(screen, game, textures, cam_x, font, small, particles=None):
         draw_centered(screen, font.render(text, True, (255, 255, 255)), HEIGHT // 4 + i * 34)
 
     if game.alive and game.shop_here() is not None:
-        draw_centered(screen, font.render("Nospied E, lai atvērtu veikalu", True, (255, 230, 150)), HEIGHT - 70)
+        draw_centered(screen, font.render("Press E to open the shop", True, (255, 230, 150)), HEIGHT - 70)
 
     if not game.alive:
         shade = pygame.Surface((WIDTH, HEIGHT), SRCALPHA)
         shade.fill((0, 0, 0, 170))
         screen.blit(shade, (0, 0))
-        title = "SADEGA LAVĀ!" if game.death_cause == "lava" else "SADRUMSTS!"
+        title = DEATH_TITLES.get(game.death_cause, "GAME OVER")
         draw_centered(screen, font.render(title, True, (255, 90, 90)), HEIGHT // 2 - 50)
-        draw_centered(screen, font.render(f"Rezultāts: {game.score}", True, (255, 255, 255)), HEIGHT // 2)
-        draw_centered(screen, small.render("Enter: spēlēt vēlreiz    Esc: Iziet", True, (220, 220, 220)), HEIGHT // 2 + 50)
+        draw_centered(screen, font.render(f"Score: {game.score}", True, (255, 255, 255)), HEIGHT // 2)
+        draw_centered(screen, small.render("Enter: play again    Esc: menu", True, (220, 220, 220)), HEIGHT // 2 + 50)
 
 
 SHOP_KEYS = [K_1, K_2, K_3, K_4]
@@ -187,12 +232,12 @@ def draw_shop(screen, game, font, small):
     shade = pygame.Surface((WIDTH, HEIGHT), SRCALPHA)
     shade.fill((0, 0, 0, 170))
     screen.blit(shade, (0, 0))
-    panel = pygame.Rect(0, 0, 620, 410)
+    panel = pygame.Rect(0, 0, 640, 430)
     panel.center = (WIDTH // 2, HEIGHT // 2)
     pygame.draw.rect(screen, (50, 46, 60), panel, border_radius=10)
     pygame.draw.rect(screen, (255, 220, 140), panel, 2, border_radius=10)
-    screen.blit(font.render("VEIKALS", True, (255, 210, 80)), (panel.x + 24, panel.y + 18))
-    gold = font.render(f"Zelts: {game.gold}", True, (255, 215, 80))
+    screen.blit(font.render("SHOP", True, (255, 210, 80)), (panel.x + 24, panel.y + 18))
+    gold = font.render(f"Gold: {game.gold:g}", True, (255, 215, 80))
     screen.blit(gold, gold.get_rect(topright=(panel.right - 24, panel.y + 18)))
     for i, key in enumerate(UPGRADE_KEYS):
         name = UPGRADES[key][0]
@@ -202,39 +247,39 @@ def draw_shop(screen, game, font, small):
         affordable = cost is not None and game.gold >= cost
         color = (255, 255, 255) if affordable else (130, 130, 140)
         screen.blit(font.render(f"{i + 1}. {name}", True, color), (panel.x + 24, y))
-        screen.blit(small.render(f"Līmenis: {level}", True, (170, 170, 180)), (panel.x + 44, y + 28))
-        price = "MAKS." if cost is None else f"{cost} zelts"
+        screen.blit(small.render(f"Level: {level}", True, (170, 170, 180)), (panel.x + 44, y + 28))
+        price = "MAX" if cost is None else f"{cost} gold"
         p = font.render(price, True, color)
         screen.blit(p, p.get_rect(topright=(panel.right - 24, y)))
-    screen.blit(small.render("1-4: pirkt      E / Esc: aizvērt", True, (200, 200, 210)),
-                (panel.x + 24, panel.bottom - 36))
+    screen.blit(small.render(f"1-4: buy      E / Esc: close      Prices rise {SHOP_PRICE_GROWTH_PER_100:.0%} every 100 m",
+                             True, (200, 200, 210)), (panel.x + 24, panel.bottom - 36))
 
 
 def draw_menu(screen, fonts, buttons, name, board):
     title_font, font, small = fonts
     screen.fill((50, 50, 58))
     draw_centered(screen, title_font.render("RUSH JOB", True, (255, 210, 80)), 40 + MENU_OY)
-    draw_centered(screen, small.render("Skien no sienas, dabū zeltu.", True, (210, 210, 210)), 105 + MENU_OY)
+    draw_centered(screen, small.render("Run from the wall, grab the gold.", True, (210, 210, 210)), 105 + MENU_OY)
 
     mouse = pygame.mouse.get_pos()
     for rect, label in buttons:
-        base = (110, 70, 70) if label == "Iziet" else (70, 110, 70)
-        hover = (150, 90, 90) if label == "Iziet" else (90, 150, 90)
+        base = (110, 70, 70) if label == "Quit" else (70, 110, 70)
+        hover = (150, 90, 90) if label == "Quit" else (90, 150, 90)
         pygame.draw.rect(screen, hover if rect.collidepoint(mouse) else base, rect, border_radius=8)
         pygame.draw.rect(screen, (255, 255, 255), rect, 2, border_radius=8)
         txt = font.render(label, True, (255, 255, 255))
         screen.blit(txt, txt.get_rect(center=rect.center))
 
-    draw_centered(screen, small.render(f"Vārds: {name}_", True, (255, 255, 255)), 345 + MENU_OY)
+    draw_centered(screen, small.render(f"Name: {name}_", True, (255, 255, 255)), 345 + MENU_OY)
 
-    draw_centered(screen, small.render("Labākie rezultāti", True, (255, 210, 80)), 385 + MENU_OY)
+    draw_centered(screen, small.render("Top scores", True, (255, 210, 80)), 385 + MENU_OY)
     if board.error:
-        draw_centered(screen, small.render("(serveris nav pieejams)", True, (170, 170, 180)), 412 + MENU_OY)
+        draw_centered(screen, small.render("(server unavailable)", True, (170, 170, 180)), 412 + MENU_OY)
     for i, row in enumerate(board.rows[:5]):
         line = f"{i + 1}. {row['name']} - {row['score']}"
         draw_centered(screen, small.render(line, True, (220, 220, 220)), 412 + MENU_OY + i * 22)
     draw_centered(screen, small.render(
-        "Kustība: bultiņas/WASD   Racšana: Space vai pele   E: veikals   M/F2: skaņa", True, (150, 150, 160)), HEIGHT - 26)
+        "Move: arrows/WASD   Mine: Space or mouse   E: shop   M/F2: sound", True, (150, 150, 160)), HEIGHT - 26)
 
 
 def main():
@@ -252,14 +297,14 @@ def main():
     start_btn.center = (WIDTH // 2, 195 + MENU_OY)
     quit_btn = pygame.Rect(0, 0, 240, 54)
     quit_btn.center = (WIDTH // 2, 262 + MENU_OY)
-    buttons = [(start_btn, "Sākt"), (quit_btn, "Iziet")]
+    buttons = [(start_btn, "Start"), (quit_btn, "Quit")]
 
     textures = load_textures()
     particles = Particles(textures)
     game = Game()
     board = api_client.Leaderboard()
     board.refresh()
-    name = os.environ.get("USERNAME") or os.environ.get("USER") or "Spēlētājs"
+    name = os.environ.get("USERNAME") or os.environ.get("USER") or "Player"
     name = name[:MAX_NAME]
     state = "menu"
     submitted = False
@@ -279,7 +324,7 @@ def main():
             if event.type == QUIT:
                 return
             if event.type == KEYDOWN and (event.key == K_F2 or (state != "menu" and event.key == K_m)):
-                sfx.toggle_mute()          # M (spēlē) vai F2 (jebkur): skaņa ieslēgta/izslēgta
+                sfx.toggle_mute()          # M (in game) or F2 (anywhere): sound on/off
                 continue
             if state == "menu":
                 if event.type == MOUSEBUTTONDOWN and event.button == 1:
@@ -321,7 +366,7 @@ def main():
                 particles.update(dt)
                 if not game.alive and not submitted:
                     submitted = True
-                    api_client.submit_score(name.strip() or "Anonīms", game.score, game.time)
+                    api_client.submit_score(name.strip() or "Anonymous", game.score, game.time)
             draw_game(screen, game, textures, camera_x(game), font, small, particles)
             if state == "shop":
                 draw_shop(screen, game, font, small)

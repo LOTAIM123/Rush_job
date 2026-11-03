@@ -1,1 +1,2 @@
-scores.db
+*.pyc
+scores.db__pycache__/

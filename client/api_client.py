@@ -16,7 +16,7 @@ def _request(path, payload=None):
 
 
 def submit_score(name, score, seconds):
-    """Fonā: nosūta rezultātu. Atgriež pavedienu."""
+    """Sends the score in the background. Returns the thread."""
     def work():
         try:
             _request("/api/scores", {"name": name, "score": score, "seconds": round(seconds, 1)})
@@ -28,7 +28,7 @@ def submit_score(name, score, seconds):
 
 
 class Leaderboard:
-    """Ielādē top sarakstu fonā; `rows` vienmēr droši lasāms."""
+    """Loads the top list in the background; `rows` is always safe to read."""
 
     def __init__(self):
         self.rows = []

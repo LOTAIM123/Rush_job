@@ -1,27 +1,27 @@
 <!doctype html>
-<html lang="lv">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Rush Job — Rezultāti un noteikumi</title>
+  <title>Rush Job — Scores and Rules</title>
   <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
 </head>
 <body>
   <header class="top">
     <a class="brand" href="#">Rush Job</a>
     <nav>
-      <a class="btn" href="#rezultati">Rezultāti</a>
-      <a class="btn" href="#noteikumi">Noteikumi</a>
-      <a class="btn btn-accent" href="/docs" target="_blank" rel="noopener">API dokumentācija</a>
+      <a class="btn" href="#scores">Scores</a>
+      <a class="btn" href="#rules">Rules</a>
+      <a class="btn btn-accent" href="/docs" target="_blank" rel="noopener">API Documentation</a>
     </nav>
   </header>
 
   <main>
-    <section id="rezultati">
-      <h1>Labākie rezultāti</h1>
+    <section id="scores">
+      <h1>Top Scores</h1>
       {% if scores %}
       <table>
-        <thead><tr><th>#</th><th>Vārds</th><th>Punkti</th><th>Laiks</th></tr></thead>
+        <thead><tr><th>#</th><th>Name</th><th>Score</th><th>Time</th></tr></thead>
         <tbody>
         {% for s in scores %}
           <tr><td>{{ loop.index }}</td><td>{{ s.name }}</td><td>{{ s.score }}</td><td>{{ "%.1f"|format(s.seconds) }} s</td></tr>
@@ -29,38 +29,38 @@
         </tbody>
       </table>
       {% else %}
-      <p class="empty">Vēl nav neviena rezultāta. Esi pirmais!</p>
+      <p class="empty">No scores yet. Be the first!</p>
       {% endif %}
     </section>
 
-    <section id="noteikumi">
-      <h1>Noteikumi</h1>
+    <section id="rules">
+      <h1>Rules</h1>
 
       <div class="card">
-        <h2>Mērķis</h2>
-        <p>Izrok ceļu pa labi cauri bezgalīgam akmenim, kamēr no kreisās puses tuvojas siena. Ja siena tevi panāk
-          vai tu pieskaries lavai, spēle beidzas. Sakrāj pēc iespējas vairāk punktu un zelta, kamēr vēl esi dzīvs.</p>
+        <h2>Goal</h2>
+        <p>Dig a path to the right through endless rock while a wall closes in from the left. The game ends if the wall
+          catches you, you touch lava, or you set off a bomb without a shield. Collect as many points and as much gold as you can while you are alive.</p>
       </div>
 
       <div class="card">
-        <h2>Vadība</h2>
+        <h2>Controls</h2>
         <table class="keys">
-          <tr><td><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> vai <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></td><td>Kustība ({{ rules.player_speed }} rūtis sekundē)</td></tr>
-          <tr><td><kbd>Space</kbd></td><td>Rakt bloku, uz kuru skaties</td></tr>
-          <tr><td>Peles kreisā poga</td><td>Rakt bloku, uz kuru norādi (tuvumā)</td></tr>
-          <tr><td><kbd>E</kbd></td><td>Atvērt veikalu (kad esi veikala telpā) un aizvērt</td></tr>
-          <tr><td><kbd>1</kbd>–<kbd>4</kbd></td><td>Pirkt uzlabojumu veikalā</td></tr>
-          <tr><td><kbd>Esc</kbd></td><td>Atpakaļ uz izvēlni</td></tr>
-          <tr><td><kbd>Enter</kbd></td><td>Sākt jaunu spēli</td></tr>
-          <tr><td><kbd>M</kbd> / <kbd>F2</kbd></td><td>Ieslēgt vai izslēgt skaņu</td></tr>
+          <tr><td><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> or <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></td><td>Move ({{ rules.player_speed }} tiles per second)</td></tr>
+          <tr><td><kbd>Space</kbd></td><td>Mine the block you are facing (works even when you are not lined up with it)</td></tr>
+          <tr><td>Left mouse button</td><td>Mine the block under the cursor (nearby)</td></tr>
+          <tr><td><kbd>E</kbd></td><td>Open and close the shop (when you are inside a shop room)</td></tr>
+          <tr><td><kbd>1</kbd>–<kbd>4</kbd></td><td>Buy an upgrade in the shop</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Back to the menu</td></tr>
+          <tr><td><kbd>Enter</kbd></td><td>Start a new game</td></tr>
+          <tr><td><kbd>M</kbd> / <kbd>F2</kbd></td><td>Sound on / off</td></tr>
         </table>
       </div>
 
       <div class="card">
-        <h2>Bloki</h2>
+        <h2>Blocks</h2>
         <div class="scroll">
         <table>
-          <thead><tr><th>Bloks</th><th>Racšanas laiks</th><th>Punkti</th><th>Zelts</th><th>Piezīme</th></tr></thead>
+          <thead><tr><th>Block</th><th>Mining time</th><th>Points</th><th>Gold</th><th>Notes</th></tr></thead>
           <tbody>
           {% for b in rules.blocks %}
             <tr><td>{{ b.name }}</td><td>{{ b.time }}</td><td>{{ b.points }}</td><td>{{ b.gold }}</td><td class="note">{{ b.note }}</td></tr>
@@ -68,41 +68,45 @@
           </tbody>
         </table>
         </div>
-        <p>Pasaule mainās līdz ar distanci: sākumā gandrīz tikai zeme, ap {{ rules.tier_stone }}. metru galvenokārt akmens,
-          no {{ rules.tier_slate }}. metra gandrīz tikai slate. Lava parādās no {{ rules.lava_min }}. metra, krūmi no {{ rules.bramble_min }}. metra.</p>
+        <p>The world changes with distance: at the start almost only dirt, around {{ rules.tier_stone }} m mostly stone,
+          from {{ rules.tier_slate }} m almost only slate. Brambles appear from {{ rules.bramble_min }} m, lava from {{ rules.lava_min }} m
+          and bombs from {{ rules.bomb_min }} m, and all of them become more common the further you go.</p>
       </div>
 
       <div class="card">
-        <h2>Siena un distance</h2>
+        <h2>The Wall and Distance</h2>
         <ul>
-          <li>Distance tiek mērīta metros (1 rūts = 1 m) no starta punkta; skaitās tālākais sasniegtais punkts.</li>
-          <li>Siena sāk ar {{ rules.wall_start }} rūtīm sekundē un kļūst par {{ rules.wall_per_100 }} rūtīm/s ātrāka ik pēc 100 m,
-            līdz maksimumam {{ rules.wall_max }} rūtis/s. Laiks sienas ātrumu neietekmē, tikai distance.</li>
-          <li>Veikalā iegādāts uzlabojums sienu var palēnināt.</li>
+          <li>Distance is measured in metres (1 tile = 1 m) from the start; your furthest point counts.</li>
+          <li>The wall's speed is a share of <strong>your top speed</strong> (base speed plus boots upgrades, not temporary speed power-ups).
+            It starts at {{ rules.wall_start }}, grows by {{ rules.wall_per_100 }} every 100 m, and reaches {{ rules.wall_max }} of your top speed
+            at about {{ rules.wall_full_at }} m. It never gets faster than you, but time and boots cannot save you: buying boots makes the wall faster too.</li>
+          <li>The Wall Brake upgrade in the shop is the way to slow the wall down.</li>
         </ul>
       </div>
 
       <div class="card">
-        <h2>Power-up</h2>
-        <p>Katrs tieši izrakts bloks ar {{ rules.powerup_chance }} varbūtību (palielinās ar uzlabojumu «Veiksme») dod nejauši izvēlētu power-up.
-          Tie darbojas {{ rules.powerup_duration }} s. Power-up var izkrist tikai no bloka, ko izraki pats, nevis no tiem, ko izposta sprādziens.</p>
+        <h2>Power-ups</h2>
+        <p>Every block you mine yourself has a {{ rules.powerup_chance }} chance (higher with the Luck upgrade) to drop a random power-up.
+          They last {{ rules.powerup_duration }} s each. Only blocks you mine directly can drop one, not blocks destroyed by an explosion.</p>
         <div class="pu-list">
           {% for p in rules.powerups %}
           <div class="pu" style="--c: {{ p.color }}">
             <strong>{{ p.name }}</strong>
             <span>{{ p.text }}</span>
-            <small>Sakrājas: {{ p.how }}.</small>
+            <small>Stacking: {{ p.how }}.</small>
           </div>
           {% endfor %}
         </div>
       </div>
 
       <div class="card">
-        <h2>Veikals</h2>
-        <p>Ik pēc {{ rules.shop_every }} m ir veikals: tukša telpa ar letes. Ieej tajā, nospied <kbd>E</kbd> un par zeltu pērc uzlabojumus (spēle uz brīdi apstājas).</p>
+        <h2>Shop</h2>
+        <p>Every {{ rules.shop_every }} m there is a shop: an empty room with a counter. Walk in, press <kbd>E</kbd> and spend gold on upgrades (the game pauses while you shop).
+          <strong>Every price rises by {{ rules.price_growth }} for each 100 m you travel</strong>, whether or not you bought anything,
+          and it also goes up each time you buy that item. The prices below are the base prices.</p>
         <div class="scroll">
         <table>
-          <thead><tr><th>Uzlabojums</th><th>Efekts</th><th>Cena</th><th>Maksimums</th></tr></thead>
+          <thead><tr><th>Upgrade</th><th>Effect</th><th>Base price</th><th>Maximum</th></tr></thead>
           <tbody>
           {% for u in rules.upgrades %}
             <tr><td>{{ u.name }}</td><td class="note">{{ u.text }}</td><td>{{ u.cost }}</td><td>{{ u.max }}</td></tr>
@@ -113,18 +117,18 @@
       </div>
 
       <div class="card">
-        <h2>Rezultāts</h2>
-        <p>Punkti tiek skaitīti par katru salauztu bloku (arī tos, ko salauž sprādziens vai 3×3). Pēc nāves rezultāts tiek nosūtīts uz serveri un parādās šajā tabulā.</p>
+        <h2>Scoring</h2>
+        <p>Points are awarded for every block that breaks (including blocks broken by 3x3 or explosions). After you die, your score is sent to the server and appears in the table above.</p>
       </div>
     </section>
 
     <section id="api" class="card docs-card">
       <div>
-        <h2>API dokumentācija</h2>
-        <p>Servera pieejamie pieprasījumi (rezultātu saraksts un nosūtīšana), ko lieto spēle.</p>
+        <h2>API Documentation</h2>
+        <p>The requests the server offers (listing and submitting scores), which the game uses.</p>
         <code>{{ docs_url }}</code>
       </div>
-      <a class="btn btn-accent btn-big" href="/docs" target="_blank" rel="noopener">Atvērt /docs</a>
+      <a class="btn btn-accent btn-big" href="/docs" target="_blank" rel="noopener">Open /docs</a>
     </section>
   </main>
 </body>
