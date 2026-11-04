@@ -53,7 +53,7 @@ The server also serves a web page with the top scores and the full rules at `htt
 
 - **Lava** kills instantly on contact. It cannot be mined and explosions do not affect it. It appears from about tile 25 and gets more common with distance.
 - **Brambles** slow you to 40% speed. They can be mined.
-- **Bombs** are dark balls hidden in the rock (from about tile 20). Mining one sets it off and kills you, unless you have a **Shield**. 3x3, Explosion and Instant Mine do not affect bombs, so they cannot be set off from a distance.
+- **Bombs** are dark balls hidden in the rock (from about tile 20). Mining one sets it off: it destroys every block within 2 tiles (other bombs chain-react) and **stuns** you for 1.5 s (no moving or mining), unless you have a **Shield**. 3x3, Explosion and Instant Mine do not affect bombs, so they cannot be set off from a distance.
 
 ### Power-ups
 
@@ -64,7 +64,7 @@ Every block you mine yourself has a 2% chance (`POWERUP_CHANCE`, higher with the
 - **Speed** - +25% movement speed per stack.
 - **Instant Mine** - blocks are mined instantly (bombs are not affected).
 - **Gold Rush** - every block you mine yourself gives bonus gold (not blocks broken by 3x3 or explosions).
-- **Shield** - protects you from bomb explosions.
+- **Shield** - protects you from the stun of bomb explosions.
 
 "Power" power-ups (3x3, Explosion, Speed) add stacks, up to 4, each with its own 10 s timer. "Time" power-ups (Instant Mine, Gold Rush, Shield) add 10 s to a single timer, up to 40 s. Settings: `game/constants.py`.
 

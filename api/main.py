@@ -58,7 +58,8 @@ def build_rules():
         4: ("Gold", "Grows in veins. Gives gold to spend in the shop."),
         5: ("Lava", "Kills instantly if you touch it. Cannot be mined; explosions do not affect it."),
         6: ("Brambles", f"Slow you down to {pct(C.BRAMBLE_SLOW)} speed. Can be mined."),
-        7: ("Bomb", "Looks like a dark ball in the rock. Mining it kills you unless you have a Shield. "
+        7: ("Bomb", f"Looks like a dark ball in the rock. Mining it makes it explode: all blocks within {C.BOMB_BLAST_RADIUS} tiles are destroyed "
+                    f"(other bombs chain-react) and you are stunned for {C.BOMB_STUN_TIME:g} s unless you have a Shield. "
                     "Not affected by 3x3, Explosion or Instant Mine, so it cannot be set off from a distance."),
     }
     blocks = []
@@ -78,8 +79,8 @@ def build_rules():
         "speed": f"+{pct(C.SPEED_PU_BONUS)} movement speed per stack.",
         "insta": "Blocks are mined instantly (except bombs).",
         "goldrush": f"Every block you mine yourself gives +{C.GOLDRUSH_GOLD:g} bonus gold "
-                    "(blocks broken by 3x3 or explosions do not count).",
-        "shield": "Protects you from bomb explosions while it lasts.",
+                    "(blocks broken by 3x3, explosions or bombs do not count).",
+        "shield": "Protects you from the stun of bomb explosions while it lasts.",
     }
     powerups = []
     for key, (name, color, mode) in C.POWERUPS.items():

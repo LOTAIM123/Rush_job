@@ -39,7 +39,7 @@
       <div class="card">
         <h2>Goal</h2>
         <p>Dig a path to the right through endless rock while a wall closes in from the left. The game ends if the wall
-          catches you, you touch lava, or you set off a bomb without a shield. Collect as many points and as much gold as you can while you are alive.</p>
+          catches you or you touch lava (a bomb only stuns you, which makes it easier for the wall to catch you). Collect as many points and as much gold as you can while you are alive.</p>
       </div>
 
       <div class="card">
@@ -78,7 +78,7 @@
         <ul>
           <li>Distance is measured in metres (1 tile = 1 m) from the start; your furthest point counts.</li>
           <li>The wall's speed is a share of <strong>your top speed</strong> (base speed plus boots upgrades, not temporary speed power-ups).
-            It starts at {{ rules.wall_start }}, grows by {{ rules.wall_per_100 }} every 100 m, and reaches {{ rules.wall_max }} of your top speed
+            It starts at {{ rules.wall_start }}, grows by {{ rules.wall_per_100 }} points (of your top speed) every 100 m, and reaches {{ rules.wall_max }} of your top speed
             at about {{ rules.wall_full_at }} m. It never gets faster than you, but time and boots cannot save you: buying boots makes the wall faster too.</li>
           <li>The Wall Brake upgrade in the shop is the way to slow the wall down.</li>
         </ul>
@@ -118,7 +118,7 @@
 
       <div class="card">
         <h2>Scoring</h2>
-        <p>Points are awarded for every block that breaks (including blocks broken by 3x3 or explosions). After you die, your score is sent to the server and appears in the table above.</p>
+        <p>Points are awarded for every block that breaks (including blocks broken by 3x3, explosions or bombs). After you die, your score is sent to the server and appears in the table above.</p>
       </div>
     </section>
 

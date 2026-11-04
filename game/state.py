@@ -3,7 +3,7 @@ import math
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
-from .constants import (BLAST_BASE_RADIUS, BLOCKS, BOMB, BOMB_BLAST_RADIUS,
+from .constants import (BLAST_BASE_RADIUS, BLOCKS, BOMB, BOMB_BLAST_RADIUS, BOMB_STUN_TIME,
                         BOOT_BONUS, BRAMBLE_SLOW, BRAMBLES, COLS, EFFECT_TTL,
                         GOLDRUSH_GOLD, LAVA, MESSAGE_TTL, NON_SOLID,
                         PICK_FACTOR, PLAYER_SIZE, PLAYER_SPEED, POWERUP_CHANCE,
@@ -64,6 +64,7 @@ class Game:
         self.score = 0
         self.damage = {}       # damage to blocks: (col, row) -> 0..1 (1 = breaks)
         self.alive = True
+        self.stun = 0.0
         self.death_cause = None    # "wall", "lava" or "bomb"
         self.events = []           # for sound/particles: ("break", kind, (col, row)), ("explode", (col, row)), ("death", cause)
         self.gold = 0
@@ -167,6 +168,9 @@ class Game:
         if len(self.events) > 200:           # safety net if nobody reads them
             self.events = self.events[-50:]
         self.tick_effects(dt)
+        if self.stun > 0:
+            self.stun = max(0.0, self.stun - dt)
+            inp = Input()                    # stunned: no movement, no mining
         self.update_player(dt, inp)
         self.distance = max(self.distance, self.player.centerx // TILE - START_COL)
         self.update_mining(dt, inp)
@@ -246,16 +250,35 @@ class Game:
             self.break_block(tile)
 
     def detonate(self, tile):
-        """A bomb the player mined goes off: it kills the player unless a Shield is active."""
-        col, row = tile
-        self.events.append(("explode", tile))
-        ttl = EFFECT_TTL * 1.5
-        self.effects.append({"kind": "bomb", "col": col, "row": row, "r": BOMB_BLAST_RADIUS,
-                             "ttl": ttl, "max": ttl})
+        """A bomb goes off: every breakable block around it is destroyed (chain-detonating other
+        bombs) and the player is stunned for a moment unless a Shield is active."""
+        queue, done = [tile], set()
+        while queue:
+            col, row = queue.pop()
+            if (col, row) in done:
+                continue
+            done.add((col, row))
+            self.world.blocks.pop((col, row), None)
+            self.damage.pop((col, row), None)
+            self.events.append(("explode", (col, row)))
+            ttl = EFFECT_TTL * 1.5
+            self.effects.append({"kind": "bomb", "col": col, "row": row, "r": BOMB_BLAST_RADIUS,
+                                 "ttl": ttl, "max": ttl})
+            for dx in range(-BOMB_BLAST_RADIUS, BOMB_BLAST_RADIUS + 1):
+                for dy in range(-BOMB_BLAST_RADIUS, BOMB_BLAST_RADIUS + 1):
+                    t = (col + dx, row + dy)
+                    kind = self.world.blocks.get(t)
+                    if kind is None or kind in UNBREAKABLE:
+                        continue
+                    if kind == BOMB:
+                        queue.append(t)
+                    else:
+                        self.break_block(t)
         if self.stacks("shield"):
-            self.messages.append(["The shield absorbed the blast!", MESSAGE_TTL])
+            self.messages.append(["The shield absorbed the stun!", MESSAGE_TTL])
         else:
-            self.kill("bomb")
+            self.stun = BOMB_STUN_TIME
+            self.messages.append(["Stunned!", MESSAGE_TTL])
 
     def pop_events(self):
         """Returns the accumulated events (for sound and particles) and clears the list."""

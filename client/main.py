@@ -181,6 +181,12 @@ def draw_game(screen, game, textures, cam_x, font, small, particles=None):
         pygame.draw.rect(screen, (30, 60, 110), p, 2, border_radius=4)
         pygame.draw.circle(screen, (255, 255, 255), (p.centerx + fx * 6, p.centery + fy * 6), 3)
     draw_shield(screen, game, p)
+    if game.stun > 0:                       # little stars circling the stunned player
+        t = pygame.time.get_ticks() / 150
+        for i in range(3):
+            a = t + i * 2.094
+            pygame.draw.circle(screen, (255, 230, 80),
+                               (int(p.centerx + math.cos(a) * 16), int(p.top - 6 + math.sin(a) * 5)), 4)
 
     draw_effects(screen, game, cam_x)
     if particles:

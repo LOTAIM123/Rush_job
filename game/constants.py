@@ -58,7 +58,8 @@ BOMB_MIN_COL = 20              # bombs are single blocks hidden in the rock
 BOMB_CHANCE_BASE = 0.004       # chance per rock tile; grows with distance
 BOMB_CHANCE_PER_TILE = 0.00003
 BOMB_CHANCE_MAX = 0.03
-BOMB_BLAST_RADIUS = 2          # size of the explosion effect, in tiles
+BOMB_BLAST_RADIUS = 2          # blocks within this many tiles (square) of a bomb are destroyed
+BOMB_STUN_TIME = 1.5           # seconds the player cannot move or mine after a blast
 
 # shops
 SHOP_EVERY = 100               # a shop every 100 distance (tiles)
