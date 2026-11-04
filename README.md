@@ -44,7 +44,7 @@ The server also serves a web page with the top scores and the full rules at `htt
 
 ## Gameplay
 
-- **The wall** chases you from the left. Its speed is a share of *your top speed* (base speed plus boots upgrades): it starts at 15% and grows by 25% every 100 m, reaching 100% of your top speed at about 340 m. Boots make the wall faster too; the **Wall Brake** upgrade slows it (-5% per level, down to 25%). See `WALL_*` in `game/constants.py`.
+- **The wall** chases you from the left. Its speed is a share of *your top speed* (base speed plus boots upgrades): it starts at 15% and grows by 25 points every 100 m with no upper limit (past ~340 m it outruns you). Boots make the wall faster too; each **Wall Brake** level removes 100 px/s from its speed (never below 20 px/s). See `WALL_*` in `game/constants.py`.
 - **Blocks** change with distance: dirt at the start, stone around 600 m, slate from 1200 m (`BLOCK_TIER_DIST`). **Gold** grows in veins (`VEIN_*`).
 - **Distance** is measured in tiles (1 tile = 1 m) from the start.
 - **Shops** appear every 100 m. **Every price rises by 25% for every 100 m travelled, even for items you never bought** (`SHOP_PRICE_GROWTH_PER_100`), and it also rises each time you buy that item.

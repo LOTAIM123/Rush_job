@@ -12,9 +12,9 @@ from .constants import (BLAST_BASE_RADIUS, BLOCKS, BOMB, BOMB_BLAST_RADIUS, BOMB
                         POWERUP_TIME_CAP, POWERUPS, REACH, ROWS, S,
                         SHOP_PRICE_GROWTH_PER_100, SPEED_PU_BONUS,
                         SPLASH_DAMAGE, SPLASH_IMMUNE, START_COL, TILE,
-                        UNBREAKABLE, UPGRADES, WALL_MAX_RATIO,
-                        WALL_RATIO_PER_TILE, WALL_SLOW_MIN_MULT,
-                        WALL_SLOW_PER_LEVEL, WALL_START_RATIO, WALL_START_X)
+                        UNBREAKABLE, UPGRADES, WALL_BRAKE_PX,
+                        WALL_RATIO_PER_TILE,
+                        WALL_START_RATIO, WALL_START_X)
 from .world import World, shop_col_near
 
 
@@ -351,16 +351,15 @@ class Game:
         return PLAYER_SPEED * (1 + BOOT_BONUS * self.levels["boots"])
 
     def wall_ratio(self):
-        """Wall speed as a fraction of the player's top speed; grows with distance."""
-        return min(WALL_MAX_RATIO, WALL_START_RATIO + WALL_RATIO_PER_TILE * self.distance)
-
-    def wall_slow_mult(self):
-        return max(WALL_SLOW_MIN_MULT, 1 - WALL_SLOW_PER_LEVEL * self.levels["slowwall"])
+        """Wall speed as a fraction of the player's top speed; grows with distance, no limit."""
+        return WALL_START_RATIO + WALL_RATIO_PER_TILE * self.distance
 
     def wall_speed(self):
-        """Wall speed in px/s: scales with distance and with the player's top speed;
-        the Wall Brake upgrade slows it down."""
-        return self.top_speed() * self.wall_ratio() * self.wall_slow_mult()
+        """Wall speed in px/s: scales endlessly with distance and with the player's top speed;
+        every Wall Brake level subtracts exactly WALL_BRAKE_PX px/s from the current speed.
+        There is no minimum or maximum speed; the wall just never runs backwards."""
+        raw = self.top_speed() * self.wall_ratio()
+        return max(0.0, raw - WALL_BRAKE_PX * self.levels["slowwall"])
 
     def kinds_under(self, r, inset=0):
         """Block kinds covered by a rectangle (shrunk by `inset` pixels)."""

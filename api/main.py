@@ -91,7 +91,7 @@ def build_rules():
     up_text = {
         "pick": f"Mining time x{C.PICK_FACTOR:g} per level (-{pct(1 - C.PICK_FACTOR)}).",
         "boots": f"+{pct(C.BOOT_BONUS)} movement speed per level. The wall speeds up with your top speed too.",
-        "slowwall": f"The wall moves {pct(C.WALL_SLOW_PER_LEVEL)} slower per level (down to {pct(C.WALL_SLOW_MIN_MULT)} of normal).",
+        "slowwall": f"Each level removes {C.WALL_BRAKE_PX} px/s from the wall's current speed.",
         "luck": f"+{pct(C.POWERUP_LUCK_BONUS)} power-up chance per level (maximum {pct(C.POWERUP_CHANCE_MAX)}).",
     }
     upgrades = []
@@ -106,9 +106,8 @@ def build_rules():
         "blocks": blocks, "powerups": powerups, "upgrades": upgrades,
         "player_speed": f"{C.PLAYER_SPEED / tile:g}",
         "wall_start": pct(C.WALL_START_RATIO),
+        "wall_brake": C.WALL_BRAKE_PX,
         "wall_per_100": pct(C.WALL_RATIO_PER_TILE * 100),
-        "wall_max": pct(C.WALL_MAX_RATIO),
-        "wall_full_at": round((C.WALL_MAX_RATIO - C.WALL_START_RATIO) / C.WALL_RATIO_PER_TILE),
         "price_growth": pct(C.SHOP_PRICE_GROWTH_PER_100),
         "tier_stone": C.BLOCK_TIER_DIST, "tier_slate": 2 * C.BLOCK_TIER_DIST,
         "powerup_chance": pct(C.POWERUP_CHANCE), "powerup_duration": f"{C.POWERUP_DURATION:g}",

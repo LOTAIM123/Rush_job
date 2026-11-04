@@ -14,8 +14,7 @@ REACH = 2.2                    # mouse mining reach in tiles
 # so buying boots never lets you simply outrun it.
 WALL_START_X = TILE
 WALL_START_RATIO = 0.15        # fraction of top speed at distance 0
-WALL_RATIO_PER_TILE = 0.0025   # +25% of top speed every 100 m
-WALL_MAX_RATIO = 1.0           # the wall can reach, but never exceed, the player's top speed
+WALL_RATIO_PER_TILE = 0.0025   # +25% of top speed every 100 m, with no upper limit
 
 # Block types change with distance: dirt -> stone -> slate (hard rock)
 BLOCK_TIER_DIST = 600          # tiles per tier: 0 = dirt, 600 = stone, 1200+ = slate
@@ -70,15 +69,14 @@ SHOP_PRICE_GROWTH_PER_100 = 0.25   # every price rises 25% per 100 m travelled, 
 UPGRADES = {
     "pick": ("Pickaxe: faster mining", 3, 2, 999),
     "boots": ("Boots: faster movement", 3, 2, 999),
-    "slowwall": ("Wall Brake: slows the wall", 4, 2, 15),
+    "slowwall": ("Wall Brake: slows the wall", 4, 2, 999),
     "luck": ("Luck: more power-ups", 4, 3, 25),
 }
 POWERUP_LUCK_BONUS = 0.01      # +1% power-up chance per level
 POWERUP_CHANCE_MAX = 0.5
 PICK_FACTOR = 0.85             # mining time x 0.85 per level
 BOOT_BONUS = 0.10              # +10% speed per level
-WALL_SLOW_PER_LEVEL = 0.05     # wall speed -5% per level
-WALL_SLOW_MIN_MULT = 0.25      # never slower than 25% of normal (15 levels)
+WALL_BRAKE_PX = 100            # each Wall Brake level removes 100 px/s from the wall's speed
 
 # power-ups that rarely drop from mined blocks (and can stack)
 POWERUP_CHANCE = 0.02          # chance that a mined block drops a power-up

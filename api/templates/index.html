@@ -78,9 +78,8 @@
         <ul>
           <li>Distance is measured in metres (1 tile = 1 m) from the start; your furthest point counts.</li>
           <li>The wall's speed is a share of <strong>your top speed</strong> (base speed plus boots upgrades, not temporary speed power-ups).
-            It starts at {{ rules.wall_start }}, grows by {{ rules.wall_per_100 }} points (of your top speed) every 100 m, and reaches {{ rules.wall_max }} of your top speed
-            at about {{ rules.wall_full_at }} m. It never gets faster than you, but time and boots cannot save you: buying boots makes the wall faster too.</li>
-          <li>The Wall Brake upgrade in the shop is the way to slow the wall down.</li>
+            It starts at {{ rules.wall_start }} and grows by {{ rules.wall_per_100 }} of your top speed every 100 m, with no upper limit: past about 340 m it is faster than you, so you need the Wall Brake. Buying boots makes the wall faster too.</li>
+          <li>Each Wall Brake level in the shop subtracts {{ rules.wall_brake }} px/s from the wall's speed.</li>
         </ul>
       </div>
 
